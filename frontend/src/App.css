@@ -107,12 +107,30 @@
   font-size: 0.96rem;
   text-align: left;
   cursor: pointer;
+  transition: all 0.2s ease;
+  transform: translateX(0);
+}
+
+.nav-item:hover {
+  background: #f1f5f9;
+  transform: translateX(4px);
 }
 
 .nav-item.active {
   background: #dfeaf9;
   color: #1d4ed8;
   font-weight: 700;
+}
+
+.nav-item.logout-btn {
+  margin-top: 12px;
+  color: #b13f3f;
+  font-weight: 700;
+}
+
+.nav-item.logout-btn:hover {
+  background: #fef2f2;
+  color: #dc2626;
 }
 
 .nav-icon {

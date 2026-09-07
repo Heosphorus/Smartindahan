@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { POSFlow } from '../pos/POSFlow'
 import { storeApi, type DashboardSummary } from '../../services/storeApi'
+import { authApi } from '../../services/authApi'
 import { AlertsPage, CustomersPage, ExpensesPage, ReportsPage, SalesPage, SettingsPage, SuppliersPage } from '../business/BusinessPages'
 import { PriceListPage } from './PriceListPage'
 
@@ -11,6 +12,7 @@ export function StoreOperationsDemo() {
   const [navNotice, setNavNotice] = useState('')
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null)
   const [dashboardError, setDashboardError] = useState('')
+  const [showLogoutModal, setShowLogoutModal] = useState(false)
 
   useEffect(() => {
     storeApi.dashboard()
@@ -36,6 +38,20 @@ export function StoreOperationsDemo() {
     }
   }
 
+  const handleLogout = async () => {
+    const token = localStorage.getItem('sarismart_token')
+    try {
+      if (token) {
+        await authApi.logout(token)
+      }
+    } catch (err) {
+      console.error('Logout error:', err)
+    } finally {
+      localStorage.removeItem('sarismart_token')
+      window.location.href = '/login'
+    }
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -49,7 +65,7 @@ export function StoreOperationsDemo() {
 
         <div className="store-box">
           <div className="mini-label">Current Store</div>
-          <div className="store-name">Juan's Sari-Sari Store</div>
+          <div className="store-name">{dashboard?.store.name ?? 'Your Store'}</div>
         </div>
 
         <nav className="nav-list">
@@ -59,6 +75,10 @@ export function StoreOperationsDemo() {
               {item}
             </button>
           ))}
+          <button className="nav-item logout-btn" onClick={() => setShowLogoutModal(true)} type="button">
+            <span className="nav-icon">⏻</span>
+            Logout
+          </button>
         </nav>
       </aside>
 
@@ -195,6 +215,20 @@ export function StoreOperationsDemo() {
         {dashboardError && <div className="dashboard-error">{dashboardError}</div>}
         </div>
       </main>
+
+      {showLogoutModal && (
+        <div className="delete-backdrop">
+          <div className="delete-dialog">
+            <div className="delete-icon">!</div>
+            <h3>Logout?</h3>
+            <p>Are you sure you want to logout? You will need to log in again to access your store.</p>
+            <div className="delete-actions">
+              <button onClick={() => setShowLogoutModal(false)} className="btn-secondary">Cancel</button>
+              <button onClick={handleLogout} className="danger-button">Logout</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

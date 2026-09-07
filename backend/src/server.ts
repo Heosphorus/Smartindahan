@@ -6,6 +6,7 @@ import { env } from './config/env.js'
 import authRoutes from './routes/authRoutes.js'
 import storeRoutes from './routes/storeRoutes.js'
 import businessRoutes from './routes/businessRoutes.js'
+import adminRoutes from './routes/adminRoutes.js'
 
 const app = express()
 
@@ -32,6 +33,7 @@ app.use((_, res, next) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/store', storeRoutes)
 app.use('/api/business', businessRoutes)
+app.use('/api/auth/admin', adminRoutes)
 
 app.get('/health', (_, res) => {
   res.json({ status: 'ok' })
