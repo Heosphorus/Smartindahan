@@ -33,6 +33,8 @@ type RegisterPayload = {
   confirmPassword?: string
   storeName?: string
   storeAddress?: string
+  privacyPolicyAccepted?: boolean
+  termsAccepted?: boolean
 }
 
 function issueToken(user: { id: string; email: string; role: string }): string {
@@ -95,6 +97,11 @@ export async function register(req: Request, res: Response): Promise<void> {
     return
   }
 
+  if (payload.privacyPolicyAccepted !== true || payload.termsAccepted !== true) {
+    res.status(400).json({ message: 'You must accept the Privacy Policy and Terms of Service before creating an account.' })
+    return
+  }
+
   const email = payload.email!.trim().toLowerCase()
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     res.status(400).json({ message: 'Please enter a valid email address.' })
@@ -134,6 +141,9 @@ export async function register(req: Request, res: Response): Promise<void> {
     storeName,
     storeAddress: payload.storeAddress!.trim(),
     role: 'STORE_OWNER',
+    privacyPolicyAccepted: true,
+    termsAccepted: true,
+    acceptedPoliciesAt: new Date(),
   })
 
   const otp = generateOtp()

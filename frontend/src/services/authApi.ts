@@ -45,7 +45,7 @@ async function request(path: string, body?: unknown, token?: string): Promise<Ap
 }
 
 export const authApi = {
-  register: (payload: Record<string, string>) => request('/register', payload),
+  register: (payload: Record<string, string | boolean>) => request('/register', payload),
   verifyEmail: (userId: string, otp: string) => request('/verify-email', { userId, otp }),
   resendOtp: (userId: string) => request('/resend-otp', { userId }),
   login: (email: string, password: string) => request('/login', { email, password }),

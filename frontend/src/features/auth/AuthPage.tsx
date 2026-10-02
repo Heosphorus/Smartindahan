@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { authApi } from '../../services/authApi'
+import { PolicyModal, type PolicyKind } from '../legal/PolicyModal'
 import './AuthPage.css'
 
 type AuthMode = 'login' | 'register' | 'verify' | 'forgot' | 'reset'
 
 const initialRegistration = {
-  firstName: '', lastName: '', email: '', mobileNumber: '', password: '', confirmPassword: '', storeName: '', storeAddress: '',
-}
+  firstName: '', lastName: '', email: '', mobileNumber: '', password: '', confirmPassword: '', storeName: '', storeAddress: '', privacyPolicyAccepted: false, termsAccepted: false,
+} as const
 
 export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string) => void }) {
   const [mode, setMode] = useState<AuthMode>('login')
@@ -22,6 +23,7 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [cooldown, setCooldown] = useState(0)
+  const [openPolicy, setOpenPolicy] = useState<PolicyKind | null>(null)
   const otpInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -41,7 +43,7 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
     setOtp('')
   }
 
-  function updateField(field: keyof typeof initialRegistration, value: string) {
+  function updateField(field: keyof typeof initialRegistration, value: string | boolean) {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -59,7 +61,14 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
 
   async function register() {
     await submit(async () => {
-      const response = await authApi.register(form)
+      if (!form.privacyPolicyAccepted || !form.termsAccepted) {
+        throw new Error('Please accept the Privacy Policy and Terms of Service to continue.')
+      }
+      const response = await authApi.register({
+        ...form,
+        privacyPolicyAccepted: form.privacyPolicyAccepted,
+        termsAccepted: form.termsAccepted,
+      })
       setUserId(response.user?.id ?? '')
       setMaskedEmail(response.user?.maskedEmail ?? '')
       setMode('verify')
@@ -162,6 +171,8 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
             <div className="auth-two-col"><label>Password<input type="password" value={form.password} onChange={(event) => updateField('password', event.target.value)} required /></label><label>Confirm password<input type="password" value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} required /></label></div>
             <label>Store name<input value={form.storeName} onChange={(event) => updateField('storeName', event.target.value)} required /></label>
             <label>Store address<input value={form.storeAddress} onChange={(event) => updateField('storeAddress', event.target.value)} required /></label>
+            <label className="auth-consent-row"><input type="checkbox" checked={Boolean(form.termsAccepted)} onChange={(event) => updateField('termsAccepted', event.target.checked)} required /> I agree to the <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('terms')}>Terms of Service</button> and <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('privacy')}>Privacy Policy</button>.</label>
+            <label className="auth-consent-row"><input type="checkbox" checked={Boolean(form.privacyPolicyAccepted)} onChange={(event) => updateField('privacyPolicyAccepted', event.target.checked)} required /> I consent to the processing of my store data as described in the <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('cookies')}>Cookie Policy</button> and <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('security')}>Security Policy</button>.</label>
             <button className="auth-primary" disabled={busy}>{busy ? 'Creating account...' : 'Create account'}</button>
           </form>}
 
@@ -175,8 +186,15 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
           {mode === 'forgot' && <form onSubmit={(event) => { event.preventDefault(); void requestReset() }}><label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><button className="auth-primary" disabled={busy}>{busy ? 'Sending code...' : 'Send verification code'}</button></form>}
 
           <div className="auth-switch">{mode === 'login' ? <>Don't have an account? <button className="auth-link" type="button" onClick={() => changeMode('register')}>Create one</button></> : <button className="auth-link" type="button" onClick={() => changeMode('login')}>Back to sign in</button>}</div>
+          <div className="auth-legal-links">
+            <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('privacy')}>Privacy Policy</button>
+            <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('terms')}>Terms of Service</button>
+            <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('cookies')}>Cookie Policy</button>
+            <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('security')}>Security Policy</button>
+          </div>
         </div>
       </section>
+      {openPolicy && <PolicyModal kind={openPolicy} onClose={() => setOpenPolicy(null)} />}
     </main>
   )
 }

@@ -22,23 +22,6 @@ function DeleteConfirmationModal({ isOpen, onClose, onConfirm, itemName }: { isO
   )
 }
 
-function FormModal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
-  if (!isOpen) return null
-  return (
-    <div className="modal-backdrop">
-      <div className="modal-dialog">
-        <div className="modal-header">
-          <h3>{title}</h3>
-          <button onClick={onClose} className="modal-close">×</button>
-        </div>
-        <div className="modal-body">
-          {children}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [loading, setLoading] = useState(true)

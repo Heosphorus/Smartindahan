@@ -30,7 +30,7 @@ export function AdminDashboard() {
       return
     }
     authApi.adminGetStats(token)
-      .then(data => setStats(data.stats))
+      .then(data => setStats(data.stats ?? null))
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load admin stats'))
       .finally(() => setLoading(false))
   }, [])

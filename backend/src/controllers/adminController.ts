@@ -31,7 +31,7 @@ export async function getAllUsers(req: AuthenticatedRequest, res: Response): Pro
       .sort({ createdAt: -1 })
       .lean()
 
-    const maskedUsers = users.map((user: UserDocument) => ({
+    const maskedUsers = users.map((user: any) => ({
       _id: user._id,
       email: user.email,
       maskedEmail: maskEmail(user.email),
@@ -139,7 +139,8 @@ export async function impersonateUser(req: AuthenticatedRequest, res: Response):
 }
 
 function maskEmail(email: string): string {
-  const [local, domain] = email.split('@')
+  const [local, domain] = (email ?? '').split('@')
+  if (!local || !domain) return '***@unknown'
   if (local.length <= 2) {
     return `${local[0]}***@${domain}`
   }
