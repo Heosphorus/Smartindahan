@@ -3,6 +3,8 @@ node_modules/
 
 # Environment
 .env
+.env.*
+!.env.example
 .env.local
 .env.development
 .env.production

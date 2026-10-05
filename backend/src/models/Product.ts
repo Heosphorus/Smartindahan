@@ -19,6 +19,7 @@ const productSchema = new Schema({
 
 productSchema.index({ storeId: 1, barcode: 1 }, { unique: true, partialFilterExpression: { barcode: { $type: 'string' } } })
 productSchema.index({ storeId: 1, name: 1 })
+productSchema.index({ storeId: 1, sku: 1 }, { partialFilterExpression: { sku: { $type: 'string' } } })
 
 export type ProductDocument = InferSchemaType<typeof productSchema>
 export const ProductModel = model('Product', productSchema)

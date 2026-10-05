@@ -18,6 +18,7 @@ const userSchema = new Schema({
   termsAccepted: { type: Boolean, default: false, required: true },
   acceptedPoliciesAt: { type: Date },
   failedLoginAttempts: { type: Number, default: 0, required: true },
+  tokenVersion: { type: Number, default: 0, required: true, min: 0 },
   lockedUntil: { type: Date },
   lastLoginAt: { type: Date },
 }, { timestamps: true })

@@ -6,6 +6,9 @@ const expenseSchema = new Schema({
   description: { type: String, required: true, trim: true },
   amount: { type: Number, required: true, min: 0 },
   expenseDate: { type: Date, required: true, default: Date.now },
+  isDeleted: { type: Boolean, default: false, required: true },
+  deletedAt: { type: Date },
+  deletedBy: { type: Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true })
 
 expenseSchema.index({ storeId: 1, expenseDate: -1 })

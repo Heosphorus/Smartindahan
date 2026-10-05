@@ -49,7 +49,7 @@ export function ScannerPage() {
         }
         setCameraStatus('Camera active')
         setPermissionError('')
-      } catch (error) {
+      } catch {
         if (!cancelled) {
           setCameraStatus('Camera blocked')
           setPermissionError('Camera permission was denied. You can still enter a barcode manually.')
@@ -102,7 +102,7 @@ export function ScannerPage() {
   const renderProductCard = () => {
     if (!detectedProduct) {
       return (
-        <div style={styles.card}>
+        <div className="theme-inline-panel" style={styles.card}>
           <h3 style={styles.title}>BARCODE NOT REGISTERED</h3>
           <p style={styles.label}>Barcode:</p>
           <p style={styles.value}>{barcodeInput || '4800012345678'}</p>
@@ -140,7 +140,7 @@ export function ScannerPage() {
     }
 
     return (
-      <div style={styles.card}>
+      <div className="theme-inline-panel" style={styles.card}>
         <h3 style={styles.title}>BARCODE DETECTED</h3>
         <h2 style={styles.productName}>{detectedProduct.name}</h2>
         <p style={styles.label}>Barcode:</p>
@@ -171,7 +171,7 @@ export function ScannerPage() {
   }
 
   return (
-    <div style={styles.page}>
+    <div className="theme-inline-panel scanner-theme-page" style={styles.page}>
       <div style={styles.header}>
         <button style={styles.backButton}>← Back</button>
       </div>
@@ -233,10 +233,10 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 500,
     margin: '0 auto',
     padding: '18px 16px 48px',
-    background: '#f8fafc',
+    background: 'var(--app-page)',
     minHeight: '100vh',
     fontFamily: 'Inter, Arial, sans-serif',
-    color: '#111827',
+    color: 'var(--app-text)',
   },
   header: {
     display: 'flex',
@@ -246,7 +246,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     background: 'transparent',
     fontSize: 18,
-    color: '#1f2937',
+    color: 'var(--app-text)',
     cursor: 'pointer',
   },
   heading: {
@@ -295,8 +295,8 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: 'wrap',
   },
   statusPill: {
-    background: '#dcfce7',
-    color: '#166534',
+    background: 'var(--app-accent-soft)',
+    color: 'var(--app-accent-readable, var(--app-accent))',
     borderRadius: 999,
     padding: '6px 10px',
     fontSize: 12,
@@ -304,16 +304,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   modeButton: {
     border: '1px solid #d1d5db',
-    background: '#fff',
+    background: 'var(--app-surface)',
     borderRadius: 999,
     padding: '8px 12px',
     cursor: 'pointer',
-    color: '#374151',
+    color: 'var(--app-text)',
   },
   modeButtonActive: {
-    background: '#111827',
+    background: 'var(--app-accent)',
     color: '#fff',
-    borderColor: '#111827',
+    borderColor: 'var(--app-accent)',
   },
   scanControls: {
     display: 'flex',
@@ -333,8 +333,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   secondaryButton: {
     border: '1px solid #d1d5db',
-    background: '#fff',
-    color: '#111827',
+    background: 'var(--app-surface)',
+    color: 'var(--app-text)',
     borderRadius: 12,
     padding: '12px 16px',
     fontWeight: 600,
@@ -352,7 +352,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    color: '#475569',
+    color: 'var(--app-muted)',
   },
   input: {
     width: '100%',
@@ -361,7 +361,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 10,
     padding: '12px 14px',
     fontSize: 14,
-    background: '#fff',
+    background: 'var(--app-surface)',
   },
   errorText: {
     marginTop: 12,
@@ -370,7 +370,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   card: {
     marginTop: 18,
-    background: '#fff',
+    background: 'var(--app-surface)',
     border: '1px solid #e2e8f0',
     borderRadius: 18,
     padding: 18,
@@ -379,19 +379,19 @@ const styles: Record<string, React.CSSProperties> = {
   title: {
     margin: '0 0 8px',
     fontSize: 18,
-    color: '#0f172a',
+    color: 'var(--app-text)',
     fontWeight: 800,
   },
   productName: {
     margin: '0 0 14px',
     fontSize: 26,
-    color: '#111827',
+    color: 'var(--app-text)',
   },
   value: {
     margin: '4px 0 12px',
     fontSize: 16,
     fontWeight: 700,
-    color: '#0f172a',
+    color: 'var(--app-text)',
   },
   statsRow: {
     display: 'grid',
@@ -419,7 +419,7 @@ const styles: Record<string, React.CSSProperties> = {
   footerText: {
     marginTop: 18,
     fontSize: 14,
-    color: '#475569',
+    color: 'var(--app-muted)',
     textAlign: 'center',
   },
 }

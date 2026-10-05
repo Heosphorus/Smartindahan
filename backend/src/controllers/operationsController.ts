@@ -1,13 +1,21 @@
 import type { Request, Response } from 'express'
 import mongoose from 'mongoose'
+import { randomUUID } from 'node:crypto'
 
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.js'
 import { InventoryTransactionModel } from '../models/InventoryTransaction.js'
 import { ProductModel } from '../models/Product.js'
 import { SaleModel } from '../models/Sale.js'
+import { recordAuditLog } from '../services/auditService.js'
+
+class OperationError extends Error {
+  constructor(message: string, readonly statusCode = 400) {
+    super(message)
+  }
+}
 
 function currentStore(req: AuthenticatedRequest): mongoose.Types.ObjectId | null {
-  return req.user?.id && mongoose.isValidObjectId(req.user.id) ? new mongoose.Types.ObjectId(req.user.id) : null
+  return req.user?.storeId && mongoose.isValidObjectId(req.user.storeId) ? new mongoose.Types.ObjectId(req.user.storeId) : null
 }
 
 function failSession(res: Response): void { res.status(401).json({ message: 'Invalid session.' }) }
@@ -27,13 +35,15 @@ export async function checkout(req: AuthenticatedRequest, res: Response): Promis
   if (!storeId) { failSession(res); return }
   const payload = req.body as { items?: Array<{ productId?: string; quantity?: number }>; paymentMethod?: string; customerName?: string }
   if (!payload.items?.length) { res.status(400).json({ message: 'Cart cannot be empty.' }); return }
+  if (payload.paymentMethod !== undefined && !['Cash', 'Maya', 'GCash', 'Utang'].includes(payload.paymentMethod)) { res.status(400).json({ message: 'Unsupported payment method.' }); return }
+  if (payload.customerName !== undefined && (typeof payload.customerName !== 'string' || payload.customerName.length > 160)) { res.status(400).json({ message: 'Customer name is invalid.' }); return }
 
   const session = await mongoose.startSession()
   try {
     let result: { code: string; total: number; profit: number } | null = null
     await session.withTransaction(async () => {
       const ids = payload.items!.map((item) => item.productId).filter((id): id is string => Boolean(id) && mongoose.isValidObjectId(id))
-      if (ids.length !== payload.items!.length) throw new Error('Cart contains an invalid product.')
+      if (ids.length !== payload.items!.length) throw new OperationError('Cart contains an invalid product.')
       const products = await ProductModel.find({ _id: { $in: ids }, storeId, status: 'active' }).session(session)
       const byId = new Map(products.map((product) => [product.id, product]))
       const saleItems: Array<{ productId: mongoose.Types.ObjectId; productName: string; quantity: number; unitPrice: number; costPrice: number; lineTotal: number }> = []
@@ -41,29 +51,33 @@ export async function checkout(req: AuthenticatedRequest, res: Response): Promis
       let profit = 0
 
       for (const item of payload.items!) {
-        const quantity = Number(item.quantity)
+        const quantity = item.quantity
         const product = item.productId ? byId.get(item.productId) : undefined
-        if (!product || !Number.isInteger(quantity) || quantity < 1) throw new Error('Cart contains an invalid quantity or product.')
-        if (product.currentStock < quantity) throw new Error(`${product.name} has insufficient stock.`)
-        const lineTotal = quantity * product.sellingPrice
+        if (!product || !Number.isSafeInteger(quantity) || quantity! < 1) throw new OperationError('Cart contains an invalid quantity or product.')
+        const validQuantity = quantity!
+        if (product.currentStock < validQuantity) throw new OperationError(`${product.name} has insufficient stock.`, 409)
+        const lineTotal = validQuantity * product.sellingPrice
         total += lineTotal
-        profit += quantity * (product.sellingPrice - product.costPrice)
+        profit += validQuantity * (product.sellingPrice - product.costPrice)
         const previousStock = product.currentStock
-        product.currentStock -= quantity
+        product.currentStock -= validQuantity
         await product.save({ session })
-        await InventoryTransactionModel.create([{ storeId, userId: storeId, productId: product._id, type: 'sale', quantity: -quantity, previousStock, newStock: product.currentStock }], { session })
-        saleItems.push({ productId: product._id, productName: product.name, quantity, unitPrice: product.sellingPrice, costPrice: product.costPrice, lineTotal })
+        await InventoryTransactionModel.create([{ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), productId: product._id, type: 'sale', quantity: -validQuantity, previousStock, newStock: product.currentStock }], { session })
+        saleItems.push({ productId: product._id, productName: product.name, quantity: validQuantity, unitPrice: product.sellingPrice, costPrice: product.costPrice, lineTotal })
       }
 
-      const code = `TXN${Date.now().toString().slice(-8)}`
-      const sale: Record<string, unknown> = { storeId, cashierId: storeId, transactionCode: code, items: saleItems, subtotal: total, total, estimatedProfit: profit, paymentMethod: payload.paymentMethod ?? 'Cash' }
+      const code = `TXN-${randomUUID()}`
+      const sale: Record<string, unknown> = { storeId, cashierId: new mongoose.Types.ObjectId(req.user!.id), transactionCode: code, items: saleItems, subtotal: total, total, estimatedProfit: profit, paymentMethod: payload.paymentMethod ?? 'Cash' }
       if (payload.customerName) sale.customerName = payload.customerName
-      await SaleModel.create([sale], { session })
+      const [createdSale] = await SaleModel.create([sale], { session })
+      if (!createdSale) throw new OperationError('Checkout could not be completed.', 500)
+      await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'SALE_CREATED', resourceType: 'Sale', resourceId: createdSale._id, metadata: { transactionCode: code, total } }, session)
       result = { code, total, profit }
     })
     res.status(201).json({ message: 'Checkout completed.', sale: result })
   } catch (error) {
-    res.status(400).json({ message: error instanceof Error ? error.message : 'Checkout could not be completed.' })
+    const expected = error instanceof OperationError
+    res.status(expected ? error.statusCode : 500).json({ message: expected ? error.message : 'Checkout could not be completed.' })
   } finally {
     await session.endSession()
   }
@@ -74,17 +88,28 @@ export async function stockOut(req: AuthenticatedRequest, res: Response): Promis
   if (!storeId) { failSession(res); return }
   const payload = req.body as { productId?: string; quantity?: number; reason?: string; note?: string }
   if (!payload.productId || !mongoose.isValidObjectId(payload.productId) || !Number.isInteger(payload.quantity) || payload.quantity! < 1) { res.status(400).json({ message: 'Product and positive quantity are required.' }); return }
-  const product = await ProductModel.findOne({ _id: payload.productId, storeId, status: 'active' })
-  if (!product) { res.status(404).json({ message: 'Product not found.' }); return }
-  if (product.currentStock < payload.quantity!) { res.status(400).json({ message: 'Insufficient stock.' }); return }
-  const previousStock = product.currentStock
-  product.currentStock -= payload.quantity!
-  await product.save()
-  const transaction: Record<string, unknown> = { storeId, userId: storeId, productId: product._id, type: 'stock_out', quantity: -payload.quantity!, previousStock, newStock: product.currentStock }
-  if (payload.reason) transaction.reason = payload.reason
-  if (payload.note) transaction.note = payload.note
-  await InventoryTransactionModel.create(transaction)
-  res.status(201).json({ message: 'Stock-out recorded.', product: { id: product.id, currentStock: product.currentStock } })
+  const session = await mongoose.startSession()
+  let newStock = 0
+  try {
+    await session.withTransaction(async () => {
+      const product = await ProductModel.findOne({ _id: payload.productId, storeId, status: 'active' }).session(session)
+      if (!product) throw new OperationError('Product not found.', 404)
+      if (product.currentStock < payload.quantity!) throw new OperationError('Insufficient stock.', 409)
+      const previousStock = product.currentStock
+      product.currentStock -= payload.quantity!
+      await product.save({ session })
+      const transaction = { storeId, userId: new mongoose.Types.ObjectId(req.user!.id), productId: product._id, type: 'stock_out' as const, quantity: -payload.quantity!, previousStock, newStock: product.currentStock, ...(payload.reason ? { reason: payload.reason } : {}), ...(payload.note ? { note: payload.note } : {}) }
+      await InventoryTransactionModel.create([transaction], { session })
+      await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'INVENTORY_STOCK_OUT', resourceType: 'Product', resourceId: product._id, metadata: { quantity: payload.quantity!, previousStock, newStock: product.currentStock } }, session)
+      newStock = product.currentStock
+    })
+  } catch (error) {
+    res.status(error instanceof OperationError ? error.statusCode : 500).json({ message: error instanceof OperationError ? error.message : 'Stock-out could not be completed.' })
+    return
+  } finally {
+    await session.endSession()
+  }
+  res.status(201).json({ message: 'Stock-out recorded.', product: { id: payload.productId, currentStock: newStock } })
 }
 
 export async function stockIn(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -93,17 +118,31 @@ export async function stockIn(req: AuthenticatedRequest, res: Response): Promise
   const payload = req.body as { items?: Array<{ productId?: string; quantity?: number; unitCost?: number }>; note?: string }
   if (!payload.items?.length) { res.status(400).json({ message: 'At least one stock-in item is required.' }); return }
   for (const item of payload.items) {
-    const quantity = item.quantity
-    if (!item.productId || !mongoose.isValidObjectId(item.productId) || typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity < 1) { res.status(400).json({ message: 'Invalid stock-in item.' }); return }
-    const product = await ProductModel.findOne({ _id: item.productId, storeId, status: 'active' })
-    if (!product) { res.status(404).json({ message: 'Product not found.' }); return }
-    const previousStock = product.currentStock
-    product.currentStock += quantity
-    if (item.unitCost !== undefined) product.costPrice = item.unitCost
-    await product.save()
-    const transaction: Record<string, unknown> = { storeId, userId: storeId, productId: product._id, type: 'stock_in', quantity, previousStock, newStock: product.currentStock }
-    if (payload.note) transaction.note = payload.note
-    await InventoryTransactionModel.create(transaction)
+    if (!item.productId || !mongoose.isValidObjectId(item.productId) || typeof item.quantity !== 'number' || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || (item.unitCost !== undefined && (typeof item.unitCost !== 'number' || !Number.isFinite(item.unitCost) || item.unitCost < 0))) {
+      res.status(400).json({ message: 'Invalid stock-in item.' })
+      return
+    }
+  }
+  const session = await mongoose.startSession()
+  try {
+    await session.withTransaction(async () => {
+      for (const item of payload.items!) {
+        const product = await ProductModel.findOne({ _id: item.productId, storeId, status: 'active' }).session(session)
+        if (!product) throw new OperationError('Product not found.', 404)
+        const previousStock = product.currentStock
+        product.currentStock += item.quantity!
+        if (item.unitCost !== undefined) product.costPrice = item.unitCost
+        await product.save({ session })
+        const transaction = { storeId, userId: new mongoose.Types.ObjectId(req.user!.id), productId: product._id, type: 'stock_in' as const, quantity: item.quantity!, previousStock, newStock: product.currentStock, ...(payload.note ? { note: payload.note } : {}) }
+        await InventoryTransactionModel.create([transaction], { session })
+        await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'INVENTORY_STOCK_IN', resourceType: 'Product', resourceId: product._id, metadata: { quantity: item.quantity!, previousStock, newStock: product.currentStock } }, session)
+      }
+    })
+  } catch (error) {
+    res.status(error instanceof OperationError ? error.statusCode : 500).json({ message: error instanceof OperationError ? error.message : 'Stock-in could not be completed.' })
+    return
+  } finally {
+    await session.endSession()
   }
   res.status(201).json({ message: 'Stock-in recorded.' })
 }
@@ -119,14 +158,26 @@ export async function inventoryCount(req: AuthenticatedRequest, res: Response): 
       res.status(400).json({ message: 'Invalid inventory count.' })
       return
     }
-    const product = await ProductModel.findOne({ _id: count.productId, storeId, status: 'active' })
-    if (!product) { res.status(404).json({ message: 'Product not found.' }); return }
-    const previousStock = product.currentStock
-    product.currentStock = count.scannedQuantity
-    await product.save()
-    const transaction: Record<string, unknown> = { storeId, userId: storeId, productId: product._id, type: 'inventory_count', quantity: count.scannedQuantity - previousStock, previousStock, newStock: product.currentStock }
-    if (payload.note) transaction.note = payload.note
-    await InventoryTransactionModel.create(transaction)
+  }
+  const session = await mongoose.startSession()
+  try {
+    await session.withTransaction(async () => {
+      for (const count of payload.counts!) {
+        const product = await ProductModel.findOne({ _id: count.productId, storeId, status: 'active' }).session(session)
+        if (!product) throw new OperationError('Product not found.', 404)
+        const previousStock = product.currentStock
+        product.currentStock = count.scannedQuantity!
+        await product.save({ session })
+        const transaction = { storeId, userId: new mongoose.Types.ObjectId(req.user!.id), productId: product._id, type: 'inventory_count' as const, quantity: count.scannedQuantity! - previousStock, previousStock, newStock: product.currentStock, ...(payload.note ? { note: payload.note } : {}) }
+        await InventoryTransactionModel.create([transaction], { session })
+        await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'INVENTORY_COUNT', resourceType: 'Product', resourceId: product._id, metadata: { countedStock: count.scannedQuantity!, previousStock } }, session)
+      }
+    })
+  } catch (error) {
+    res.status(error instanceof OperationError ? error.statusCode : 500).json({ message: error instanceof OperationError ? error.message : 'Inventory count could not be completed.' })
+    return
+  } finally {
+    await session.endSession()
   }
   res.status(201).json({ message: 'Inventory count recorded.' })
 }

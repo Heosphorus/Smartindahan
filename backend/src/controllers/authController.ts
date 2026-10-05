@@ -37,9 +37,9 @@ type RegisterPayload = {
   termsAccepted?: boolean
 }
 
-function issueToken(user: { id: string; email: string; role: string }): string {
+function issueToken(user: { id: string; email: string; role: string; tokenVersion: number }): string {
   const options = { expiresIn: env.jwtExpiresIn ?? '7d' } as jwt.SignOptions
-  return jwt.sign({ id: user.id, email: user.email, role: user.role }, env.jwtSecret, options)
+  return jwt.sign({ id: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion }, env.jwtSecret, options)
 }
 
 function clientIp(req: Request): string {
@@ -258,7 +258,7 @@ export async function login(req: Request, res: Response): Promise<void> {
 
   const user = await UserModel.findOne({ email }).select('+passwordHash')
   if (!user || !user.isActive) {
-    await audit(req, 'LOGIN_FAILED', undefined, { email })
+    await audit(req, 'LOGIN_FAILED')
     res.status(401).json({ message: 'Invalid email or password.' })
     return
   }
@@ -287,7 +287,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   user.lastLoginAt = new Date()
   await user.save()
   await audit(req, 'LOGIN_SUCCESSFUL', user._id)
-  res.status(200).json({ message: 'Login successful.', token: issueToken({ id: user.id, email: user.email, role: user.role }), user: { ...userResponse(user), status: 'AUTHENTICATED' } })
+  res.status(200).json({ message: 'Login successful.', token: issueToken({ id: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion }), user: { ...userResponse(user), status: 'AUTHENTICATED' } })
 }
 
 export async function logout(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -380,7 +380,7 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
     return
   }
 
-  const user = await UserModel.findByIdAndUpdate(userId, { passwordHash: await bcrypt.hash(password, 12), failedLoginAttempts: 0, lockedUntil: undefined }, { new: true })
+  const user = await UserModel.findByIdAndUpdate(userId, { $set: { passwordHash: await bcrypt.hash(password, 12), failedLoginAttempts: 0, lockedUntil: undefined }, $inc: { tokenVersion: 1 } }, { new: true })
   if (!user) {
     res.status(404).json({ message: 'User not found.' })
     return

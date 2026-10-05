@@ -1,18 +1,19 @@
 import bcrypt from 'bcryptjs'
 import mongoose from 'mongoose'
 
-import { env } from '../config/env.js'
+import { connectDatabase } from '../config/database.js'
+import { validatePasswordStrength } from '../services/authService.js'
 import { UserModel } from '../models/User.js'
 
 async function createAdminUser(): Promise<void> {
   try {
-    // Connect to database
-    await mongoose.connect(env.mongoUri)
-    console.log('Connected to MongoDB')
+    await connectDatabase()
 
-    // Admin user details
+    const adminPassword = process.env.ADMIN_PASSWORD
+    if (!adminPassword) throw new Error('Set ADMIN_PASSWORD in the environment before creating an admin user.')
+    const passwordCheck = validatePasswordStrength(adminPassword)
+    if (!passwordCheck.isValid) throw new Error(passwordCheck.message)
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@sarismart.com'
-    const adminPassword = process.env.ADMIN_PASSWORD || 'Admin123!'
     const firstName = process.env.ADMIN_FIRSTNAME || 'Admin'
     const lastName = process.env.ADMIN_LASTNAME || 'User'
     const mobileNumber = process.env.ADMIN_MOBILE || '09123456789'
@@ -47,14 +48,10 @@ async function createAdminUser(): Promise<void> {
       isActive: true,
     })
 
-    console.log('Admin user created successfully:')
-    console.log(`  Email: ${adminEmail}`)
-    console.log(`  Password: ${adminPassword}`)
-    console.log(`  Role: ${adminUser.role}`)
-    console.log('\nPlease change the password after first login!')
+    console.log(`Admin user created successfully with role ${adminUser.role}.`)
   } catch (error) {
-    console.error('Error creating admin user:', error)
-    process.exit(1)
+    console.error('Unable to create admin user:', error instanceof Error ? error.name : 'UnknownError')
+    process.exitCode = 1
   } finally {
     await mongoose.disconnect()
     console.log('Disconnected from MongoDB')

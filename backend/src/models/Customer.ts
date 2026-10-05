@@ -9,6 +9,9 @@ const customerSchema = new Schema({
   outstandingBalance: { type: Number, min: 0, default: 0 },
   utangRequestedAt: { type: Date },
   utangPaidAt: { type: Date },
+  isDeleted: { type: Boolean, default: false, required: true },
+  deletedAt: { type: Date },
+  deletedBy: { type: Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true })
 
 customerSchema.index({ storeId: 1, name: 1 })

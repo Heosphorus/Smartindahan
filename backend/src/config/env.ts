@@ -21,3 +21,17 @@ export const env = {
   otpExpiresMinutes: 5,
   otpMaxAttempts: 5,
 }
+
+export function validateEnvironment(): void {
+  if (!Number.isInteger(env.port) || env.port < 1 || env.port > 65535) {
+    throw new Error('PORT must be a valid TCP port number.')
+  }
+
+  if (env.nodeEnv === 'production') {
+    const placeholderSecret = /^(development|replace|change|your|example|test)[-_ ]/i.test(env.jwtSecret)
+    if (placeholderSecret || env.jwtSecret.length < 32) {
+      throw new Error('JWT_SECRET must be a unique secret of at least 32 characters in production.')
+    }
+    if (!env.mongoUri.trim()) throw new Error('MONGODB_URI must be configured in production.')
+  }
+}

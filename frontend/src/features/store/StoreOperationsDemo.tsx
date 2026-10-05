@@ -4,6 +4,7 @@ import { storeApi, type DashboardSummary } from '../../services/storeApi'
 import { authApi } from '../../services/authApi'
 import { AlertsPage, CustomersPage, ExpensesPage, ReportsPage, SalesPage, SettingsPage, SuppliersPage } from '../business/BusinessPages'
 import { PriceListPage } from './PriceListPage'
+import './DashboardControls.css'
 
 const formatPeso = (value: number) => `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
@@ -13,12 +14,15 @@ export function StoreOperationsDemo() {
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null)
   const [dashboardError, setDashboardError] = useState('')
   const [showLogoutModal, setShowLogoutModal] = useState(false)
+  const [salesPeriod, setSalesPeriod] = useState<'weekly' | 'monthly'>('weekly')
 
   useEffect(() => {
-    storeApi.dashboard()
-      .then(setDashboard)
-      .catch((error: unknown) => setDashboardError(error instanceof Error ? error.message : 'Unable to load dashboard data.'))
-  }, [])
+    let currentRequest = true
+    storeApi.dashboard(salesPeriod)
+      .then((data) => { if (currentRequest) setDashboard(data) })
+      .catch((error: unknown) => { if (currentRequest) setDashboardError(error instanceof Error ? error.message : 'Unable to load dashboard data.') })
+    return () => { currentRequest = false }
+  }, [salesPeriod])
 
   const chartData = dashboard?.salesOverview ?? []
   const chartMax = Math.max(...chartData.map((point) => point.sales), 1)
@@ -141,7 +145,16 @@ export function StoreOperationsDemo() {
           <section className="panel chart-panel">
             <div className="panel-header">
               <h3>Sales Overview</h3>
-              <span className="panel-chip">Last 7 days</span>
+              <label className="sales-period-control">
+                <span className="sr-only">Sales overview period</span>
+                <select value={salesPeriod} onChange={(event) => {
+                  setDashboardError('')
+                  setSalesPeriod(event.target.value as 'weekly' | 'monthly')
+                }} aria-label="Sales overview period">
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </label>
             </div>
             <svg viewBox="0 0 760 220" className="chart-svg" aria-label="Sales chart">
               <path d={chartAreaPath} fill="rgba(59, 130, 246, 0.18)" />
@@ -154,8 +167,15 @@ export function StoreOperationsDemo() {
                 <line x1="0" y1="190" x2="760" y2="190" />
               </g>
             </svg>
-            <div className="chart-labels">
-              {(dashboard?.salesOverview ?? []).map((point) => <span key={point.date}>{new Date(`${point.date}T00:00:00`).toLocaleDateString('en-PH', { weekday: 'short' })}</span>)}
+            <div className={`chart-labels ${salesPeriod}`}>
+              {chartData.map((point, index) => {
+                if (salesPeriod === 'monthly' && index !== 0 && index % 5 !== 0 && index !== chartData.length - 1) return null
+                const date = new Date(`${point.date}T00:00:00Z`)
+                const label = salesPeriod === 'weekly'
+                  ? date.toLocaleDateString('en-PH', { weekday: 'short', month: 'numeric', day: 'numeric', timeZone: 'UTC' })
+                  : date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+                return <span key={point.date}>{label}</span>
+              })}
             </div>
           </section>
 

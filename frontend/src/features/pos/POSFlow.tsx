@@ -83,7 +83,7 @@ export function POSFlow() {
   )
 
   return (
-    <div style={styles.card}>
+    <div className="theme-inline-panel" style={styles.card}>
       <div style={styles.headerRow}>
         <div>
           <p style={styles.kicker}>POS</p>
@@ -136,7 +136,7 @@ export function POSFlow() {
 
 const styles: Record<string, React.CSSProperties> = {
   card: {
-    background: '#fff',
+    background: 'var(--app-surface)',
     border: '1px solid #e2e8f0',
     borderRadius: 20,
     padding: 18,
@@ -154,13 +154,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
     letterSpacing: 1,
     fontWeight: 700,
-    color: '#64748b',
+    color: 'var(--app-muted)',
     textTransform: 'uppercase',
   },
   title: {
     margin: '4px 0 0',
     fontSize: 24,
-    color: '#0f172a',
+    color: 'var(--app-text)',
   },
   primaryButton: {
     border: 'none',
@@ -173,7 +173,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   secondaryButton: {
     border: '1px solid #d1d5db',
-    background: '#fff',
+    background: 'var(--app-surface)',
     borderRadius: 12,
     padding: '12px 16px',
     fontWeight: 600,
@@ -186,7 +186,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 14,
     padding: 12,
     borderRadius: 14,
-    background: '#f8fafc',
+    background: 'var(--app-page)',
     border: '1px solid #e2e8f0',
   },
   label: {
@@ -194,13 +194,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
     letterSpacing: 0.7,
     textTransform: 'uppercase',
-    color: '#64748b',
+    color: 'var(--app-muted)',
     fontWeight: 700,
   },
   value: {
     margin: '6px 0 0',
     fontWeight: 700,
-    color: '#0f172a',
+    color: 'var(--app-text)',
   },
   cartList: {
     display: 'flex',
@@ -219,16 +219,16 @@ const styles: Record<string, React.CSSProperties> = {
   itemName: {
     margin: 0,
     fontWeight: 700,
-    color: '#0f172a',
+    color: 'var(--app-text)',
   },
   metaText: {
     margin: '4px 0 0',
     fontSize: 12,
-    color: '#64748b',
+    color: 'var(--app-muted)',
   },
   amountBox: {
-    background: '#ecfdf5',
-    color: '#166534',
+    background: 'var(--app-accent-soft)',
+    color: 'var(--app-accent-readable, var(--app-accent))',
     borderRadius: 8,
     padding: '6px 10px',
     fontWeight: 700,
@@ -237,7 +237,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    background: '#0f172a',
+    background: 'var(--app-inverse-surface, #173039)',
     color: '#fff',
     borderRadius: 12,
     padding: '12px 14px',
@@ -255,6 +255,8 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 10,
     padding: '10px 12px',
     marginBottom: 14,
+    background: 'var(--app-surface)',
+    color: 'var(--app-text)',
   },
 }
 

@@ -32,7 +32,7 @@ export function StockInFlow() {
   }
 
   return (
-    <div style={styles.card}>
+    <div className="theme-inline-panel" style={styles.card}>
       <p style={styles.kicker}>Supplier stock-in</p>
       <h3 style={styles.title}>{supplier}</h3>
 
@@ -76,7 +76,7 @@ export function StockOutFlow() {
   const [product, setProduct] = useState(demoProducts[0])
 
   return (
-    <div style={styles.card}>
+    <div className="theme-inline-panel" style={styles.card}>
       <p style={styles.kicker}>Stock-out</p>
       <h3 style={styles.title}>Manual removal</h3>
 
@@ -137,7 +137,7 @@ export function InventoryCountFlow() {
   }
 
   return (
-    <div style={styles.card}>
+    <div className="theme-inline-panel" style={styles.card}>
       <p style={styles.kicker}>Inventory count</p>
       <h3 style={styles.title}>Live counting</h3>
 
@@ -176,7 +176,7 @@ export function InventoryCountFlow() {
 
 const styles: Record<string, React.CSSProperties> = {
   card: {
-    background: '#fff',
+    background: 'var(--app-surface)',
     border: '1px solid #e2e8f0',
     borderRadius: 20,
     padding: 18,
@@ -187,13 +187,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
     letterSpacing: 1,
     fontWeight: 700,
-    color: '#64748b',
+    color: 'var(--app-muted)',
     textTransform: 'uppercase',
   },
   title: {
     margin: '4px 0 12px',
     fontSize: 24,
-    color: '#0f172a',
+    color: 'var(--app-text)',
   },
   label: {
     display: 'block',
@@ -202,7 +202,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
     letterSpacing: 0.7,
     textTransform: 'uppercase',
-    color: '#64748b',
+    color: 'var(--app-muted)',
     fontWeight: 700,
   },
   input: {
@@ -212,7 +212,8 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #cbd5e1',
     padding: '10px 12px',
     fontSize: 14,
-    background: '#fff',
+    background: 'var(--app-surface)',
+    color: 'var(--app-text)',
   },
   primaryButton: {
     border: 'none',
@@ -227,7 +228,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   secondaryButton: {
     border: '1px solid #d1d5db',
-    background: '#fff',
+    background: 'var(--app-surface)',
+    color: 'var(--app-text)',
     borderRadius: 12,
     padding: '12px 16px',
     fontWeight: 600,
@@ -256,22 +258,22 @@ const styles: Record<string, React.CSSProperties> = {
   },
   itemName: {
     fontWeight: 700,
-    color: '#0f172a',
+    color: 'var(--app-text)',
   },
   metaText: {
     marginTop: 2,
     fontSize: 12,
-    color: '#64748b',
+    color: 'var(--app-muted)',
   },
   amountText: {
     fontWeight: 700,
-    color: '#166534',
+    color: 'var(--app-accent-readable, var(--app-accent))',
   },
   totalRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    background: '#0f172a',
+    background: 'var(--app-inverse-surface, #173039)',
     color: '#fff',
     borderRadius: 12,
     padding: '12px 14px',

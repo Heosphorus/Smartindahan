@@ -1,0 +1,26 @@
+html[data-theme=dark]{--app-accent-readable:#91d9d0;--app-inverse-surface:#293a40}html[data-theme=dark][data-accent=blue]{--app-accent-readable:#91c4ff}html[data-theme=dark][data-accent=green]{--app-accent-readable:#9be3a9}html[data-theme=dark][data-accent=rose]{--app-accent-readable:#ffadbd}html[data-theme=dark][data-accent=amber]{--app-accent-readable:#ffd28a}html[data-theme=dark][data-accent=graphite]{--app-accent-readable:#c5d1d7}
+html[data-theme=dark] .business-eyebrow,html[data-theme=dark] .price-eyebrow,html[data-theme=dark] .category-label,html[data-theme=dark] .business-page .status-pill{color:var(--app-accent-readable)!important}
+html[data-theme=dark] .settings-section-mark,html[data-theme=dark] .category-tab.active,html[data-theme=dark] .mode-option.selected{color:var(--app-accent-readable)!important}
+html[data-theme=dark] .theme-inline-panel :is(p,h1,h2,h3,label,span,strong,td,th):not(button):not(button *){color:var(--app-text)!important}
+html[data-theme=dark] .theme-inline-panel button{color:inherit}
+html[data-theme=dark] .theme-inline-panel button[style*="background: rgb(22, 163, 74)"]{color:#fff!important}
+html[data-theme=dark] .theme-inline-panel button[style*="background: rgb(22, 163, 74)"] *{color:#fff!important}
+html[data-theme=dark] .theme-inline-panel div[style*="background: rgb(15, 23, 42)"]{background:var(--app-inverse-surface)!important;color:#fff!important}
+html[data-theme=dark] .theme-inline-panel :is(input,select,textarea){background:#121a1e!important;border-color:#46575d!important;color:#f1f5f5!important}
+html[data-theme=dark] .theme-inline-panel :is(input,select,textarea)::placeholder{color:#aab9bd!important;opacity:1}
+html[data-theme=dark] .theme-inline-panel table th{background:#192328;color:#d4dfe1}
+html[data-theme=dark] .policy-modal{background:var(--app-surface);color:var(--app-text);border-color:var(--app-border)}html[data-theme=dark] .policy-modal h3,html[data-theme=dark] .policy-modal h4{color:var(--app-text)}html[data-theme=dark] .policy-modal p{color:var(--app-muted)}html[data-theme=dark] .policy-summary{background:#293a40;color:#e8eff0;border-color:#4c6a70}
+html[data-theme=dark] .auth-message{background:#183a34;color:#a8e8d1}html[data-theme=dark] .auth-error,html[data-theme=dark] .dashboard-error,html[data-theme=dark] .price-error{background:#452929;color:#ffc0b8;border-color:#814542}
+html[data-theme=dark] .status-badge{color:#edf4f4}html[data-theme=dark] .status-active{background:#183a34;color:#a8e8d1}html[data-theme=dark] .status-pending{background:#47351e;color:#ffd28a}html[data-theme=dark] .status-inactive{background:#303d43;color:#d0dadd}
+html[data-theme=dark] .price-success{background:#183a34;color:#a8e8d1;border-color:#34735f}
+html[data-theme=dark] .stock-warning{color:#ffc078!important}.utang-owed{color:#ff9a92!important}.utang-clear{color:#91d9d0!important}
+html[data-theme=dark] .kpi-value,html[data-theme=dark] .panel-header h3,html[data-theme=dark] .rank-name,html[data-theme=dark] .tx-id,html[data-theme=dark] .tx-amount{color:var(--app-text)}
+html[data-theme=dark] .kpi-label,html[data-theme=dark] .kpi-sub,html[data-theme=dark] .panel-chip,html[data-theme=dark] .chart-labels,html[data-theme=dark] .rank-count,html[data-theme=dark] .stock-name,html[data-theme=dark] .stock-left,html[data-theme=dark] .tx-meta{color:var(--app-muted)}
+html[data-theme=dark] .stock-left{color:#ff9a92}
+html[data-theme=dark] .panel-chip{background:#29363c}
+html[data-theme=dark] .panel-chip.danger{background:#452929;color:#ffc0b8}
+html[data-theme=dark] .kpi-icon.positive{background:#183a34;color:#a8e8d1}
+html[data-theme=dark] .kpi-icon.neutral{background:#203a54;color:#a9d0ff}
+html[data-theme=dark] .kpi-icon.warning{background:#47351e;color:#ffd28a}
+html[data-theme=dark] .kpi-icon.pastel{background:#392d52;color:#d9c2ff}
+html[data-theme=dark] .sales-period-control select{background:#172126;border-color:var(--app-border);color:var(--app-text)}

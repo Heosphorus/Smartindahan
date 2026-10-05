@@ -1,5 +1,8 @@
+import { handleAuthenticatedUnauthorized } from './apiSession'
+
 export type DashboardSummary = {
   store: { id: string; name: string }
+  salesOverviewPeriod: 'weekly' | 'monthly'
   kpis: {
     todaysSales: number
     estimatedProfit: number
@@ -20,6 +23,7 @@ async function storeRequest<T>(path: string, body?: unknown, method?: string): P
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     ...(body ? { headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) } : {}),
   })
+  handleAuthenticatedUnauthorized(response.status, Boolean(token))
   const contentType = response.headers.get('content-type') ?? ''
   if (!contentType.includes('application/json')) {
     throw new Error('Store API returned an unexpected response. Open the Vite frontend URL, not a static HTML server.')
@@ -30,7 +34,7 @@ async function storeRequest<T>(path: string, body?: unknown, method?: string): P
 }
 
 export const storeApi = {
-  dashboard: () => storeRequest<{ store: DashboardSummary['store']; kpis: DashboardSummary['kpis']; salesOverview: DashboardSummary['salesOverview']; topSelling: DashboardSummary['topSelling']; lowStock: DashboardSummary['lowStock']; recentTransactions: DashboardSummary['recentTransactions'] }>('/dashboard'),
+  dashboard: (period: 'weekly' | 'monthly' = 'weekly') => storeRequest<{ store: DashboardSummary['store']; kpis: DashboardSummary['kpis']; salesOverviewPeriod: DashboardSummary['salesOverviewPeriod']; salesOverview: DashboardSummary['salesOverview']; topSelling: DashboardSummary['topSelling']; lowStock: DashboardSummary['lowStock']; recentTransactions: DashboardSummary['recentTransactions'] }>(`/dashboard?period=${period}`),
   products: () => storeRequest<{ products: ProductRecord[] }>('/products'),
   addProduct: (payload: Record<string, unknown>) => storeRequest<{ product: ProductRecord }>('/products', payload),
   bulkAddProducts: (names: string[], category: string, unit: string) => storeRequest<{ products: ProductRecord[]; message: string }>('/products/bulk', { names, category, unit }),
@@ -38,6 +42,7 @@ export const storeApi = {
   deleteProduct: (id: string) => storeRequest<{ message: string }>(`/products/${id}`, undefined, 'DELETE'),
   lookupProduct: (rawValue: string) => storeRequest<{ found: boolean; product?: ProductRecord }>(`/products/barcode/lookup`, { rawValue }),
   checkout: (items: Array<{ productId: string; quantity: number }>, paymentMethod = 'Cash') => storeRequest<{ sale: { code: string; total: number; profit: number } }>('/sales/checkout', { items, paymentMethod }),
+  inventoryCount: (productId: string, scannedQuantity: number) => storeRequest<{ message: string }>('/inventory/count', { counts: [{ productId, scannedQuantity }] }),
 }
 
 export type ProductRecord = {

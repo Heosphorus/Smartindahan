@@ -98,8 +98,25 @@ export function PriceListPage() {
     const payload = { ...form, costPrice: Number(form.costPrice), sellingPrice: Number(form.sellingPrice), currentStock: Number(form.currentStock), initialStock: Number(form.currentStock), minStock: Number(form.minStock) }
     const wasEditing = Boolean(editor?.product)
     try {
-      if (wasEditing) await storeApi.updateProduct(editor?.product?._id ?? editor?.product?.id ?? '', payload)
-      else await storeApi.addProduct(payload)
+      if (wasEditing) {
+        const productId = editor?.product?._id ?? editor?.product?.id ?? ''
+        const originalStock = editor?.product?.currentStock ?? 0
+        const currentStock = payload.currentStock
+        const productUpdates = {
+          name: payload.name,
+          category: payload.category,
+          brand: payload.brand,
+          barcode: payload.barcode,
+          costPrice: payload.costPrice,
+          sellingPrice: payload.sellingPrice,
+          minStock: payload.minStock,
+          unit: payload.unit,
+        }
+        await storeApi.updateProduct(productId, productUpdates)
+        if (currentStock !== originalStock) await storeApi.inventoryCount(productId, currentStock)
+      } else {
+        await storeApi.addProduct(payload)
+      }
       setEditor(null)
       setNotice(wasEditing ? 'Product details successfully changed.' : 'Product successfully added.')
       await load()

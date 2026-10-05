@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { businessApi, type Customer, type Alert, type Expense, type Report, type Sale, type Settings, type Supplier } from '../../services/businessApi'
 import { authApi } from '../../services/authApi'
+import { accentOptions, getThemePreferences, saveThemePreferences, type ThemeMode } from '../../services/themePreferences'
 import './BusinessPages.css'
+import './SettingsPage.css'
+import './ThemeSettings.css'
 
 const formatPeso = (value: number) => `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
@@ -18,6 +21,20 @@ function DeleteConfirmationModal({ isOpen, onClose, onConfirm, itemName }: { isO
           <button onClick={onConfirm} className="danger-button">Delete</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function EntryFormModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="modal-backdrop">
+      <section className="modal-dialog entry-form-dialog" role="dialog" aria-modal="true" aria-label={title}>
+        <header className="modal-header">
+          <h3>{title}</h3>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close form">×</button>
+        </header>
+        <div className="modal-body">{children}</div>
+      </section>
     </div>
   )
 }
@@ -90,6 +107,7 @@ export function CustomersPage() {
       })
       setCustomers([...customers, result.customer])
       setShowAddForm(false)
+      setEditingCustomer(null)
       setFormData({ name: '', mobileNumber: '', address: '', creditLimit: '' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add customer')
@@ -97,7 +115,12 @@ export function CustomersPage() {
   }
 
   const handleEditCustomer = (customer: Customer) => {
+    if (editingCustomer?._id === customer._id) {
+      setShowAddForm(true)
+      return
+    }
     setEditingCustomer(customer)
+    setShowAddForm(true)
     setFormData({
       name: customer.name,
       mobileNumber: customer.mobileNumber || '',
@@ -118,6 +141,7 @@ export function CustomersPage() {
       })
       setCustomers(customers.map(c => c._id === editingCustomer._id ? result.customer : c))
       setEditingCustomer(null)
+      setShowAddForm(false)
       setFormData({ name: '', mobileNumber: '', address: '', creditLimit: '' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update customer')
@@ -148,36 +172,29 @@ export function CustomersPage() {
 
       {error && <div className="dashboard-error">{error}</div>}
 
-      <button onClick={() => { setShowAddForm(!showAddForm); setEditingCustomer(null); setFormData({ name: '', mobileNumber: '', address: '', creditLimit: '' }) }} className="btn-primary" type="button">
-        {showAddForm || editingCustomer ? 'Cancel' : '+ Add Customer'}
+      <button onClick={() => {
+        if (editingCustomer) {
+          setEditingCustomer(null)
+          setFormData({ name: '', mobileNumber: '', address: '', creditLimit: '' })
+        }
+        setShowAddForm(true)
+      }} className="btn-primary" type="button">
+        + Add Customer
       </button>
 
-      {(showAddForm || editingCustomer) && (
-        <form onSubmit={editingCustomer ? handleUpdateCustomer : handleAddCustomer} className="customer-form">
-          <input
-            placeholder="Name"
-            value={formData.name}
-            onChange={e => setFormData({ ...formData, name: e.target.value })}
-            required
-          />
-          <input
-            placeholder="Mobile Number"
-            value={formData.mobileNumber}
-            onChange={e => setFormData({ ...formData, mobileNumber: e.target.value })}
-          />
-          <input
-            placeholder="Address"
-            value={formData.address}
-            onChange={e => setFormData({ ...formData, address: e.target.value })}
-          />
-          <input
-            type="number"
-            placeholder="Credit Limit"
-            value={formData.creditLimit}
-            onChange={e => setFormData({ ...formData, creditLimit: e.target.value })}
-          />
-          <button type="submit" className="btn-primary">{editingCustomer ? 'Update Customer' : 'Add Customer'}</button>
-        </form>
+      {showAddForm && (
+        <EntryFormModal title={editingCustomer ? 'Edit customer' : 'Add customer'} onClose={() => setShowAddForm(false)}>
+          <form onSubmit={editingCustomer ? handleUpdateCustomer : handleAddCustomer} className="customer-form">
+            <label>Name<input placeholder="Name" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required /></label>
+            <label>Contact number<input placeholder="Contact number" value={formData.mobileNumber} onChange={e => setFormData({ ...formData, mobileNumber: e.target.value })} /></label>
+            <label>Address<input placeholder="Address" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} /></label>
+            <label>Credit limit<input type="number" min="0" placeholder="Credit limit" value={formData.creditLimit} onChange={e => setFormData({ ...formData, creditLimit: e.target.value })} /></label>
+            <div className="form-actions">
+              <button type="submit" className="btn-primary">{editingCustomer ? 'Update Customer' : 'Add Customer'}</button>
+              <button type="button" className="btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
+            </div>
+          </form>
+        </EntryFormModal>
       )}
 
       <div className="customer-list">
@@ -252,6 +269,7 @@ export function ExpensesPage() {
       })
       setExpenses([...expenses, result.expense])
       setShowAddForm(false)
+      setEditingExpense(null)
       setFormData({ category: '', description: '', amount: '', expenseDate: '' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add expense')
@@ -259,7 +277,12 @@ export function ExpensesPage() {
   }
 
   const handleEditExpense = (expense: Expense) => {
+    if (editingExpense?._id === expense._id) {
+      setShowAddForm(true)
+      return
+    }
     setEditingExpense(expense)
+    setShowAddForm(true)
     setFormData({
       category: expense.category,
       description: expense.description,
@@ -280,6 +303,7 @@ export function ExpensesPage() {
       })
       setExpenses(expenses.map(e => e._id === editingExpense._id ? result.expense : e))
       setEditingExpense(null)
+      setShowAddForm(false)
       setFormData({ category: '', description: '', amount: '', expenseDate: '' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update expense')
@@ -310,40 +334,29 @@ export function ExpensesPage() {
 
       {error && <div className="dashboard-error">{error}</div>}
 
-      <button onClick={() => { setShowAddForm(!showAddForm); setEditingExpense(null); setFormData({ category: '', description: '', amount: '', expenseDate: '' }) }} className="btn-primary" type="button">
-        {showAddForm || editingExpense ? 'Cancel' : '+ Add Expense'}
+      <button onClick={() => {
+        if (editingExpense) {
+          setEditingExpense(null)
+          setFormData({ category: '', description: '', amount: '', expenseDate: '' })
+        }
+        setShowAddForm(true)
+      }} className="btn-primary" type="button">
+        + Add Expense
       </button>
 
-      {(showAddForm || editingExpense) && (
-        <form onSubmit={editingExpense ? handleUpdateExpense : handleAddExpense} className="customer-form">
-          <input
-            placeholder="Category"
-            value={formData.category}
-            onChange={e => setFormData({ ...formData, category: e.target.value })}
-            required
-          />
-          <input
-            placeholder="Description"
-            value={formData.description}
-            onChange={e => setFormData({ ...formData, description: e.target.value })}
-            required
-          />
-          <input
-            type="number"
-            placeholder="Amount"
-            value={formData.amount}
-            onChange={e => setFormData({ ...formData, amount: e.target.value })}
-            required
-          />
-          <input
-            type="date"
-            placeholder="Date"
-            value={formData.expenseDate}
-            onChange={e => setFormData({ ...formData, expenseDate: e.target.value })}
-            required
-          />
-          <button type="submit" className="btn-primary">{editingExpense ? 'Update Expense' : 'Add Expense'}</button>
-        </form>
+      {showAddForm && (
+        <EntryFormModal title={editingExpense ? 'Edit expense' : 'Add expense'} onClose={() => setShowAddForm(false)}>
+          <form onSubmit={editingExpense ? handleUpdateExpense : handleAddExpense} className="customer-form">
+            <label>Category<input placeholder="Category" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} required /></label>
+            <label>Description<input placeholder="Description" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} required /></label>
+            <label>Amount<input type="number" min="0.01" step="0.01" placeholder="Amount" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} required /></label>
+            <label>Date<input type="date" value={formData.expenseDate} onChange={e => setFormData({ ...formData, expenseDate: e.target.value })} required /></label>
+            <div className="form-actions">
+              <button type="submit" className="btn-primary">{editingExpense ? 'Update Expense' : 'Add Expense'}</button>
+              <button type="button" className="btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
+            </div>
+          </form>
+        </EntryFormModal>
       )}
 
       <div className="customer-list">
@@ -530,6 +543,13 @@ export function SettingsPage() {
   const [showPasswordForm, setShowPasswordForm] = useState(false)
   const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', mobileNumber: '', storeName: '', storeAddress: '' })
   const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [themePreferences, setThemePreferences] = useState(getThemePreferences)
+
+  const updateThemePreference = (changes: Partial<typeof themePreferences>) => {
+    const next = { ...themePreferences, ...changes }
+    setThemePreferences(next)
+    saveThemePreferences(next)
+  }
 
   useEffect(() => {
     businessApi.settings()
@@ -576,135 +596,133 @@ export function SettingsPage() {
   if (loading) return <div className="business-page"><p>Loading settings...</p></div>
 
   return (
-    <section className="business-page">
-      <h2>Settings</h2>
-      <p>Configure store settings and preferences.</p>
+    <section className="business-page settings-page">
+      <div className="settings-heading">
+        <div>
+          <p className="business-eyebrow">ACCOUNT & STORE</p>
+          <h2>Settings</h2>
+          <p>Manage your contact details and store profile.</p>
+        </div>
+        {settings && !editing && (
+          <div className="settings-heading-actions">
+            <button onClick={() => setEditing(true)} className="btn-primary" type="button">Edit settings</button>
+            <button onClick={() => setShowPasswordForm(!showPasswordForm)} className="btn-secondary" type="button">
+              {showPasswordForm ? 'Hide password form' : 'Change password'}
+            </button>
+          </div>
+        )}
+      </div>
 
       {error && <div className="dashboard-error">{error}</div>}
+
+      <section className="settings-section appearance-section" aria-labelledby="appearance-heading">
+        <div className="settings-section-heading">
+          <div>
+            <h3 id="appearance-heading">Appearance</h3>
+            <p>Choose the color and display mode used across SariSmart.</p>
+          </div>
+        </div>
+        <div className="appearance-controls">
+          <fieldset className="appearance-mode">
+            <legend>Display mode</legend>
+            <div className="mode-switch" role="group" aria-label="Display mode">
+              {(['light', 'dark'] as ThemeMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={themePreferences.mode === mode ? 'mode-option selected' : 'mode-option'}
+                  aria-pressed={themePreferences.mode === mode}
+                  onClick={() => updateThemePreference({ mode })}
+                >
+                  <span className={`mode-preview ${mode}`} aria-hidden="true">{mode === 'light' ? 'Aa' : 'Aа'}</span>
+                  <span>{mode === 'light' ? 'Light' : 'Dark'}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="appearance-accent">
+            <legend>Accent color</legend>
+            <div className="accent-options" role="group" aria-label="Accent color">
+              {accentOptions.map((accent) => (
+                <button
+                  key={accent.id}
+                  type="button"
+                  className={themePreferences.accent === accent.id ? 'accent-option selected' : 'accent-option'}
+                  style={{ '--swatch-color': accent.color } as React.CSSProperties}
+                  aria-label={`${accent.name} accent color`}
+                  aria-pressed={themePreferences.accent === accent.id}
+                  title={accent.name}
+                  onClick={() => updateThemePreference({ accent: accent.id })}
+                >
+                  <span aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+      </section>
 
       {settings && (
         <>
           {!editing ? (
-            <div className="settings-display">
-              <button onClick={() => setEditing(true)} className="btn-primary" type="button">Edit Settings</button>
-              <button onClick={() => setShowPasswordForm(!showPasswordForm)} className="btn-secondary" type="button">
-                {showPasswordForm ? 'Cancel Password Change' : 'Change Password'}
-              </button>
-              <div className="customer-list">
-                <div className="customer-card">
-                  <div className="customer-info">
-                    <h3>Owner</h3>
-                    <p>{settings.firstName} {settings.lastName}</p>
-                    <p>📱 {settings.mobileNumber}</p>
-                    <p>✉️ {settings.email}</p>
-                  </div>
+            <div className="settings-sections">
+              <section className="settings-section">
+                <div className="settings-section-heading">
+                  <div><h3>Owner profile</h3><p>Personal details used for your account.</p></div>
+                  <span className="settings-section-mark" aria-hidden="true">01</span>
                 </div>
-                <div className="customer-card">
-                  <div className="customer-info">
-                    <h3>Store</h3>
-                    <p>{settings.storeName}</p>
-                    <p>📍 {settings.storeAddress}</p>
-                  </div>
+                <dl className="settings-details">
+                  <div><dt>Full name</dt><dd>{settings.firstName} {settings.lastName}</dd></div>
+                  <div><dt>Email</dt><dd>{settings.email}</dd></div>
+                  <div><dt>Contact number</dt><dd>{settings.mobileNumber}</dd></div>
+                </dl>
+              </section>
+              <section className="settings-section">
+                <div className="settings-section-heading">
+                  <div><h3>Store profile</h3><p>Business details shown in SariSmart.</p></div>
+                  <span className="settings-section-mark" aria-hidden="true">02</span>
                 </div>
-              </div>
+                <dl className="settings-details">
+                  <div><dt>Store name</dt><dd>{settings.storeName}</dd></div>
+                  <div><dt>Store address</dt><dd>{settings.storeAddress}</dd></div>
+                </dl>
+              </section>
             </div>
           ) : (
-            <form onSubmit={handleUpdateSettings} className="customer-form settings-form">
-              <div>
-                <label>First Name</label>
-                <input
-                  placeholder="First Name"
-                  value={formData.firstName}
-                  onChange={e => setFormData({ ...formData, firstName: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label>Last Name</label>
-                <input
-                  placeholder="Last Name"
-                  value={formData.lastName}
-                  onChange={e => setFormData({ ...formData, lastName: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label>Email</label>
-                <input
-                  placeholder="Email"
-                  type="email"
-                  value={formData.email}
-                  onChange={e => setFormData({ ...formData, email: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label>Mobile Number</label>
-                <input
-                  placeholder="Mobile Number"
-                  value={formData.mobileNumber}
-                  onChange={e => setFormData({ ...formData, mobileNumber: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label>Store Name</label>
-                <input
-                  placeholder="Store Name"
-                  value={formData.storeName}
-                  onChange={e => setFormData({ ...formData, storeName: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label>Store Address</label>
-                <input
-                  placeholder="Store Address"
-                  value={formData.storeAddress}
-                  onChange={e => setFormData({ ...formData, storeAddress: e.target.value })}
-                  required
-                />
-              </div>
+            <form onSubmit={handleUpdateSettings} className="settings-editor">
+              <section className="settings-section">
+                <div className="settings-section-heading"><div><h3>Owner profile</h3><p>Update the details associated with your account.</p></div></div>
+                <div className="settings-fields">
+                  <label>First name<input placeholder="First name" value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} required /></label>
+                  <label>Last name<input placeholder="Last name" value={formData.lastName} onChange={e => setFormData({ ...formData, lastName: e.target.value })} required /></label>
+                  <label>Email<input placeholder="Email" type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} required /></label>
+                  <label>Contact number<input placeholder="Contact number" value={formData.mobileNumber} onChange={e => setFormData({ ...formData, mobileNumber: e.target.value })} required /></label>
+                </div>
+              </section>
+              <section className="settings-section">
+                <div className="settings-section-heading"><div><h3>Store profile</h3><p>Update how your business is identified.</p></div></div>
+                <div className="settings-fields">
+                  <label>Store name<input placeholder="Store name" value={formData.storeName} onChange={e => setFormData({ ...formData, storeName: e.target.value })} required /></label>
+                  <label>Store address<input placeholder="Store address" value={formData.storeAddress} onChange={e => setFormData({ ...formData, storeAddress: e.target.value })} required /></label>
+                </div>
+              </section>
               <div className="form-actions">
-                <button type="submit" className="btn-primary">Save Settings</button>
+                <button type="submit" className="btn-primary">Save changes</button>
                 <button type="button" onClick={() => { setEditing(false); setFormData(settings) }} className="btn-secondary">Cancel</button>
               </div>
             </form>
           )}
 
           {showPasswordForm && (
-            <form onSubmit={handleChangePassword} className="customer-form settings-form password-form">
-              <h3>Change Password</h3>
-              <div>
-                <label>Current Password</label>
-                <input
-                  type="password"
-                  placeholder="Current Password"
-                  value={passwordData.currentPassword}
-                  onChange={e => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label>New Password</label>
-                <input
-                  type="password"
-                  placeholder="New Password"
-                  value={passwordData.newPassword}
-                  onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label>Confirm New Password</label>
-                <input
-                  type="password"
-                  placeholder="Confirm New Password"
-                  value={passwordData.confirmPassword}
-                  onChange={e => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                  required
-                />
-              </div>
+            <form onSubmit={handleChangePassword} className="settings-editor password-editor">
+              <section className="settings-section">
+                <div className="settings-section-heading"><div><h3>Change password</h3><p>Choose a new password to secure your account.</p></div></div>
+                <div className="settings-fields password-fields">
+                  <label>Current password<input type="password" placeholder="Current password" value={passwordData.currentPassword} onChange={e => setPasswordData({ ...passwordData, currentPassword: e.target.value })} required /></label>
+                  <label>New password<input type="password" placeholder="New password" value={passwordData.newPassword} onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })} required /></label>
+                  <label>Confirm new password<input type="password" placeholder="Confirm new password" value={passwordData.confirmPassword} onChange={e => setPasswordData({ ...passwordData, confirmPassword: e.target.value })} required /></label>
+                </div>
+              </section>
               <div className="form-actions">
                 <button type="submit" className="btn-primary">Change Password</button>
                 <button type="button" onClick={() => { setShowPasswordForm(false); setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' }) }} className="btn-secondary">Cancel</button>
@@ -799,30 +817,28 @@ export function SuppliersPage() {
 
       {error && <div className="dashboard-error">{error}</div>}
 
-      <button onClick={() => { setShowAddForm(!showAddForm); setEditingSupplier(null); setFormData({ name: '', contactNumber: '', address: '' }) }} className="btn-primary" type="button">
-        {showAddForm || editingSupplier ? 'Cancel' : '+ Add Supplier'}
+      <button onClick={() => {
+        if (editingSupplier) {
+          setEditingSupplier(null)
+          setFormData({ name: '', contactNumber: '', address: '' })
+        }
+        setShowAddForm(true)
+      }} className="btn-primary" type="button">
+        + Add Supplier
       </button>
 
-      {(showAddForm || editingSupplier) && (
-        <form onSubmit={editingSupplier ? handleUpdateSupplier : handleAddSupplier} className="customer-form">
-          <input
-            placeholder="Name"
-            value={formData.name}
-            onChange={e => setFormData({ ...formData, name: e.target.value })}
-            required
-          />
-          <input
-            placeholder="Contact Number"
-            value={formData.contactNumber}
-            onChange={e => setFormData({ ...formData, contactNumber: e.target.value })}
-          />
-          <input
-            placeholder="Address"
-            value={formData.address}
-            onChange={e => setFormData({ ...formData, address: e.target.value })}
-          />
-          <button type="submit" className="btn-primary">{editingSupplier ? 'Update Supplier' : 'Add Supplier'}</button>
-        </form>
+      {showAddForm && (
+        <EntryFormModal title={editingSupplier ? 'Edit supplier' : 'Add supplier'} onClose={() => setShowAddForm(false)}>
+          <form onSubmit={editingSupplier ? handleUpdateSupplier : handleAddSupplier} className="customer-form">
+            <label>Name<input placeholder="Name" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required /></label>
+            <label>Contact number<input placeholder="Contact number" value={formData.contactNumber} onChange={e => setFormData({ ...formData, contactNumber: e.target.value })} /></label>
+            <label>Address<input placeholder="Address" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} /></label>
+            <div className="form-actions">
+              <button type="submit" className="btn-primary">{editingSupplier ? 'Update Supplier' : 'Add Supplier'}</button>
+              <button type="button" className="btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
+            </div>
+          </form>
+        </EntryFormModal>
       )}
 
       <div className="customer-list">

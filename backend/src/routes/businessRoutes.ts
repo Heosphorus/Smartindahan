@@ -1,10 +1,10 @@
 import { Router } from 'express'
 
-import { authenticateToken } from '../middleware/authMiddleware.js'
+import { authenticateToken, requireRole, requireStoreMembership } from '../middleware/authMiddleware.js'
 import { createCustomer, createExpense, createSupplier, deleteCustomer, deleteExpense, deleteSupplier, getSettings, listAlerts, listCustomers, listExpenses, listSales, listSuppliers, salesReport, updateCustomer, updateExpense, updateSettings, updateSupplier } from '../controllers/businessController.js'
 
 const router = Router()
-router.use(authenticateToken)
+router.use(authenticateToken, requireRole('STORE_OWNER'), requireStoreMembership)
 router.get('/sales', listSales)
 router.get('/reports/sales', salesReport)
 router.get('/customers', listCustomers)

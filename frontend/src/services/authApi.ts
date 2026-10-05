@@ -1,3 +1,5 @@
+import { handleAuthenticatedUnauthorized } from './apiSession'
+
 const API_URL = import.meta.env.VITE_API_URL ?? '/api'
 
 type ApiResponse = {
@@ -31,6 +33,7 @@ async function request(path: string, body?: unknown, token?: string): Promise<Ap
     },
     body: body ? JSON.stringify(body) : undefined,
   })
+  handleAuthenticatedUnauthorized(response.status, Boolean(token))
 
   const contentType = response.headers.get('content-type') ?? ''
   if (!contentType.includes('application/json')) {

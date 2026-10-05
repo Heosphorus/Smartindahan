@@ -18,22 +18,20 @@ type AdminStats = {
 }
 
 export function AdminDashboard() {
+  const token = localStorage.getItem('sarismart_token')
   const [stats, setStats] = useState<AdminStats | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(Boolean(token))
   const [error, setError] = useState('')
 
   useEffect(() => {
-    const token = localStorage.getItem('sarismart_token')
-    if (!token) {
-      setError('You must be logged in as admin')
-      setLoading(false)
-      return
-    }
+    if (!token) return
     authApi.adminGetStats(token)
       .then(data => setStats(data.stats ?? null))
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load admin stats'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [token])
+
+  if (!token) return <section className="admin-page"><p>You must be logged in as admin.</p></section>
 
   if (loading) return <div className="admin-page"><p>Loading admin dashboard...</p></div>
 
@@ -66,8 +64,9 @@ export function AdminDashboard() {
 }
 
 export function AdminUsers() {
+  const token = localStorage.getItem('sarismart_token')
   const [users, setUsers] = useState<AdminUser[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(Boolean(token))
   const [error, setError] = useState('')
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
@@ -76,17 +75,14 @@ export function AdminUsers() {
   const [newEmail, setNewEmail] = useState('')
 
   useEffect(() => {
-    const token = localStorage.getItem('sarismart_token')
-    if (!token) {
-      setError('You must be logged in as admin')
-      setLoading(false)
-      return
-    }
+    if (!token) return
     authApi.adminGetUsers(token)
       .then(data => setUsers(data.users || []))
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load users'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [token])
+
+  if (!token) return <section className="admin-page"><p>You must be logged in as admin.</p></section>
 
   const handleChangePassword = async () => {
     const token = localStorage.getItem('sarismart_token')
@@ -125,7 +121,7 @@ export function AdminUsers() {
       const result = await authApi.adminImpersonateUser(token, user._id)
       if (result.token) {
         localStorage.setItem('sarismart_token', result.token)
-        window.location.href = '/dashboard'
+        window.location.assign('/dashboard')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to access account')

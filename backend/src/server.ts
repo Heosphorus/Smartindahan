@@ -1,14 +1,16 @@
 import cors from 'cors'
 import express from 'express'
+import { pathToFileURL } from 'node:url'
+import mongoose from 'mongoose'
 
 import { connectDatabase } from './config/database.js'
-import { env } from './config/env.js'
+import { env, validateEnvironment } from './config/env.js'
 import authRoutes from './routes/authRoutes.js'
 import storeRoutes from './routes/storeRoutes.js'
 import businessRoutes from './routes/businessRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
 
-const app = express()
+export const app = express()
 
 app.disable('x-powered-by')
 
@@ -24,7 +26,7 @@ app.use(cors({
   credentials: true,
 }))
 
-app.use(express.json())
+app.use(express.json({ limit: '1mb' }))
 app.use((_, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'DENY')
@@ -48,21 +50,52 @@ app.get('/health', (_, res) => {
 })
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled API error:', error)
-  const message = env.nodeEnv === 'development' && error instanceof Error
-    ? error.message
-    : 'The server could not complete that request.'
-  res.status(500).json({ message })
+  const errorCode = error && typeof error === 'object' && 'code' in error ? error.code : undefined
+  const status = error instanceof mongoose.Error.ValidationError || error instanceof mongoose.Error.CastError
+    ? 400
+    : errorCode === 11000
+      ? 409
+      : error instanceof SyntaxError && 'status' in error && error.status === 400
+        ? 400
+        : 500
+  const message = error instanceof mongoose.Error.ValidationError
+    ? 'The submitted data is invalid.'
+    : error instanceof mongoose.Error.CastError
+      ? 'A resource identifier is invalid.'
+      : errorCode === 11000
+        ? 'A record with these details already exists.'
+        : status === 400
+          ? 'The request body is invalid.'
+          : 'The server could not complete that request.'
+  const errorName = error instanceof Error ? error.name : 'UnknownError'
+  console.error(`API request failed (${status}): ${errorName}`)
+  res.status(status).json({ message })
 })
 
 async function startServer(): Promise<void> {
+  validateEnvironment()
   await connectDatabase()
-  app.listen(env.port, () => {
+  const server = app.listen(env.port, () => {
     console.log(`SariSmart backend running on port ${env.port}`)
   })
+
+  let shuttingDown = false
+  const shutdown = (signal: string): void => {
+    if (shuttingDown) return
+    shuttingDown = true
+    console.log(`Received ${signal}; closing SariSmart backend`)
+    server.close((error) => {
+      if (error) process.exitCode = 1
+      void mongoose.disconnect().catch(() => { process.exitCode = 1 })
+    })
+  }
+  process.once('SIGINT', () => shutdown('SIGINT'))
+  process.once('SIGTERM', () => shutdown('SIGTERM'))
 }
 
-startServer().catch((error: unknown) => {
-  console.error('Unable to start SariSmart backend:', error)
-  process.exitCode = 1
-})
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  startServer().catch((error: unknown) => {
+    console.error('Unable to start SariSmart backend:', error instanceof Error ? error.message : 'Unknown startup error')
+    process.exitCode = 1
+  })
+}

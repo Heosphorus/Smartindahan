@@ -8,7 +8,8 @@
     "start": "node dist/server.js",
     "build": "tsc",
     "test": "node --test --import tsx tests/**/*.test.ts",
-    "create-admin": "tsx src/scripts/createAdmin.ts"
+    "create-admin": "tsx src/scripts/createAdmin.ts",
+    "create-indexes": "tsx src/scripts/createIndexes.ts"
   },
   "keywords": [],
   "author": "",
