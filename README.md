@@ -150,9 +150,6 @@ sarismart/
 └── LICENSE
 ```
 
-See the documentation in `docs/` for more information about the system architecture, database, API, security, and development process.
-
----
 
 ## Database
 
@@ -170,15 +167,6 @@ Mongoose
 MongoDB Atlas
 ```
 
-MongoDB credentials must only exist in the backend environment configuration and must never be exposed to the frontend.
-
-See:
-
-`docs/database/database-schema.md`
-
-for the current database model documentation.
-
----
 
 ## Security
 
@@ -197,13 +185,6 @@ Important security principles include:
 * Secure environment variables
 * Safe database queries
 
-See:
-
-`docs/security/security-policy.md`
-
-for additional security documentation.
-
----
 
 ## Development
 
