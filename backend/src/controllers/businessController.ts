@@ -10,10 +10,11 @@ import { SupplierModel } from '../models/Supplier.js'
 import { UserModel } from '../models/User.js'
 import { recordAuditLog } from '../services/auditService.js'
 import { parsePagination } from '../utils/pagination.js'
+import { parseObjectId } from '../utils/objectId.js'
 import { pickRequestFields } from '../utils/requestFields.js'
 
 function storeId(req: AuthenticatedRequest): mongoose.Types.ObjectId | null {
-  return req.user?.storeId && mongoose.isValidObjectId(req.user.storeId) ? new mongoose.Types.ObjectId(req.user.storeId) : null
+  return parseObjectId(req.user?.storeId)
 }
 
 function unauthorized(res: Response): void { res.status(401).json({ message: 'Invalid session.' }) }
@@ -63,9 +64,11 @@ export async function createCustomer(req: AuthenticatedRequest, res: Response): 
 
 export async function updateCustomer(req: AuthenticatedRequest, res: Response): Promise<void> {
   const id = storeId(req); if (!id) { unauthorized(res); return }
+  const customerId = parseObjectId(req.params.id)
+  if (!customerId) { res.status(404).json({ message: 'Customer not found.' }); return }
   const updates = pickRequestFields(['name', 'mobileNumber', 'address', 'creditLimit'], req.body)
   if (!Object.keys(updates).length) { res.status(400).json({ message: 'No editable customer fields were provided.' }); return }
-  const customer = await CustomerModel.findOneAndUpdate({ _id: req.params.id, storeId: id, isDeleted: { $ne: true } }, { $set: updates }, { new: true, runValidators: true }).lean()
+  const customer = await CustomerModel.findOneAndUpdate({ _id: customerId, storeId: id, isDeleted: { $ne: true } }, { $set: updates }, { new: true, runValidators: true }).lean()
   if (!customer) { res.status(404).json({ message: 'Customer not found.' }); return }
   await recordAuditLog({ storeId: id, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'CUSTOMER_UPDATED', resourceType: 'Customer', resourceId: customer._id })
   res.json({ customer })
@@ -73,7 +76,9 @@ export async function updateCustomer(req: AuthenticatedRequest, res: Response): 
 
 export async function deleteCustomer(req: AuthenticatedRequest, res: Response): Promise<void> {
   const id = storeId(req); if (!id) { unauthorized(res); return }
-  const customer = await CustomerModel.findOne({ _id: req.params.id, storeId: id, isDeleted: { $ne: true } })
+  const customerId = parseObjectId(req.params.id)
+  if (!customerId) { res.status(404).json({ message: 'Customer not found.' }); return }
+  const customer = await CustomerModel.findOne({ _id: customerId, storeId: id, isDeleted: { $ne: true } })
   if (!customer) { res.status(404).json({ message: 'Customer not found.' }); return }
   if (customer.outstandingBalance > 0) { res.status(409).json({ message: 'A customer with an outstanding balance cannot be archived.' }); return }
   customer.isDeleted = true
@@ -107,9 +112,11 @@ export async function createSupplier(req: AuthenticatedRequest, res: Response): 
 
 export async function updateSupplier(req: AuthenticatedRequest, res: Response): Promise<void> {
   const id = storeId(req); if (!id) { unauthorized(res); return }
+  const supplierId = parseObjectId(req.params.id)
+  if (!supplierId) { res.status(404).json({ message: 'Supplier not found.' }); return }
   const updates = pickRequestFields(['name', 'contactNumber', 'address'], req.body)
   if (!Object.keys(updates).length) { res.status(400).json({ message: 'No editable supplier fields were provided.' }); return }
-  const supplier = await SupplierModel.findOneAndUpdate({ _id: req.params.id, storeId: id, isDeleted: { $ne: true } }, { $set: updates }, { new: true, runValidators: true }).lean()
+  const supplier = await SupplierModel.findOneAndUpdate({ _id: supplierId, storeId: id, isDeleted: { $ne: true } }, { $set: updates }, { new: true, runValidators: true }).lean()
   if (!supplier) { res.status(404).json({ message: 'Supplier not found.' }); return }
   await recordAuditLog({ storeId: id, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'SUPPLIER_UPDATED', resourceType: 'Supplier', resourceId: supplier._id })
   res.json({ supplier })
@@ -117,7 +124,9 @@ export async function updateSupplier(req: AuthenticatedRequest, res: Response): 
 
 export async function deleteSupplier(req: AuthenticatedRequest, res: Response): Promise<void> {
   const id = storeId(req); if (!id) { unauthorized(res); return }
-  const supplier = await SupplierModel.findOneAndUpdate({ _id: req.params.id, storeId: id, isDeleted: { $ne: true } }, { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id } }, { new: true, runValidators: true }).lean()
+  const supplierId = parseObjectId(req.params.id)
+  if (!supplierId) { res.status(404).json({ message: 'Supplier not found.' }); return }
+  const supplier = await SupplierModel.findOneAndUpdate({ _id: supplierId, storeId: id, isDeleted: { $ne: true } }, { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id } }, { new: true, runValidators: true }).lean()
   if (!supplier) { res.status(404).json({ message: 'Supplier not found.' }); return }
   await recordAuditLog({ storeId: id, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'SUPPLIER_ARCHIVED', resourceType: 'Supplier', resourceId: supplier._id })
   res.json({ message: 'Supplier archived.' })
@@ -146,10 +155,12 @@ export async function createExpense(req: AuthenticatedRequest, res: Response): P
 
 export async function updateExpense(req: AuthenticatedRequest, res: Response): Promise<void> {
   const id = storeId(req); if (!id) { unauthorized(res); return }
+  const expenseId = parseObjectId(req.params.id)
+  if (!expenseId) { res.status(404).json({ message: 'Expense not found.' }); return }
   const updates = pickRequestFields(['category', 'description', 'amount', 'expenseDate'], req.body)
   if (!Object.keys(updates).length) { res.status(400).json({ message: 'No editable expense fields were provided.' }); return }
   if ('amount' in updates && (typeof updates.amount !== 'number' || !Number.isFinite(updates.amount) || updates.amount <= 0)) { res.status(400).json({ message: 'Expense amount must be a positive number.' }); return }
-  const expense = await ExpenseModel.findOneAndUpdate({ _id: req.params.id, storeId: id, isDeleted: { $ne: true } }, { $set: updates }, { new: true, runValidators: true }).lean()
+  const expense = await ExpenseModel.findOneAndUpdate({ _id: expenseId, storeId: id, isDeleted: { $ne: true } }, { $set: updates }, { new: true, runValidators: true }).lean()
   if (!expense) { res.status(404).json({ message: 'Expense not found.' }); return }
   await recordAuditLog({ storeId: id, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'EXPENSE_UPDATED', resourceType: 'Expense', resourceId: expense._id, metadata: { amount: expense.amount } })
   res.json({ expense })
@@ -157,7 +168,9 @@ export async function updateExpense(req: AuthenticatedRequest, res: Response): P
 
 export async function deleteExpense(req: AuthenticatedRequest, res: Response): Promise<void> {
   const id = storeId(req); if (!id) { unauthorized(res); return }
-  const expense = await ExpenseModel.findOneAndUpdate({ _id: req.params.id, storeId: id, isDeleted: { $ne: true } }, { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id } }, { new: true, runValidators: true }).lean()
+  const expenseId = parseObjectId(req.params.id)
+  if (!expenseId) { res.status(404).json({ message: 'Expense not found.' }); return }
+  const expense = await ExpenseModel.findOneAndUpdate({ _id: expenseId, storeId: id, isDeleted: { $ne: true } }, { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id } }, { new: true, runValidators: true }).lean()
   if (!expense) { res.status(404).json({ message: 'Expense not found.' }); return }
   await recordAuditLog({ storeId: id, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'EXPENSE_ARCHIVED', resourceType: 'Expense', resourceId: expense._id, metadata: { amount: expense.amount } })
   res.json({ message: 'Expense archived.' })

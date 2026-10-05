@@ -33,5 +33,14 @@ export function validateEnvironment(): void {
       throw new Error('JWT_SECRET must be a unique secret of at least 32 characters in production.')
     }
     if (!env.mongoUri.trim()) throw new Error('MONGODB_URI must be configured in production.')
+    let frontendUrl: URL
+    try {
+      frontendUrl = new URL(env.frontendUrl)
+    } catch {
+      throw new Error('FRONTEND_URL must be configured with the production frontend origin.')
+    }
+    if (frontendUrl.protocol !== 'https:' || ['localhost', '127.0.0.1', '::1'].includes(frontendUrl.hostname)) {
+      throw new Error('FRONTEND_URL must use the public HTTPS production frontend origin.')
+    }
   }
 }

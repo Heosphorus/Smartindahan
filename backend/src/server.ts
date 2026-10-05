@@ -14,9 +14,11 @@ export const app = express()
 
 app.disable('x-powered-by')
 
+const developmentOrigins = env.nodeEnv === 'production' ? [] : ['http://localhost:5173', 'http://localhost:5174']
+
 app.use(cors({
   origin: (origin, callback) => {
-    const allowedOrigins = [env.frontendUrl, 'http://localhost:5173', 'http://localhost:5174']
+    const allowedOrigins = [env.frontendUrl, ...developmentOrigins]
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true)
       return
@@ -33,7 +35,8 @@ app.use((_, res, next) => {
   res.setHeader('X-XSS-Protection', '1; mode=block')
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-  res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'; connect-src 'self' http://localhost:5173 http://localhost:5174; frame-ancestors 'none'")
+  const developmentConnectSources = env.nodeEnv === 'production' ? '' : ' http://localhost:5173 http://localhost:5174'
+  res.setHeader('Content-Security-Policy', `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'; connect-src 'self'${developmentConnectSources}; frame-ancestors 'none'`)
   if (env.nodeEnv === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   }

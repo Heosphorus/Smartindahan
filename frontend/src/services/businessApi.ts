@@ -1,8 +1,9 @@
 import { handleAuthenticatedUnauthorized } from './apiSession'
+import { API_BASE_URL } from './apiBase'
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('sarismart_token')
-  const response = await fetch(`/api/business${path}`, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers ?? {}) } })
+  const response = await fetch(`${API_BASE_URL}/business${path}`, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers ?? {}) } })
   handleAuthenticatedUnauthorized(response.status, Boolean(token))
   const data = await response.json() as T & { message?: string }
   if (!response.ok) throw new Error(data.message ?? 'Unable to load business data.')

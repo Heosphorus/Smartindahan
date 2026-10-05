@@ -1,4 +1,5 @@
 import { handleAuthenticatedUnauthorized } from './apiSession'
+import { API_BASE_URL } from './apiBase'
 
 export type DashboardSummary = {
   store: { id: string; name: string }
@@ -18,7 +19,7 @@ export type DashboardSummary = {
 
 async function storeRequest<T>(path: string, body?: unknown, method?: string): Promise<T> {
   const token = localStorage.getItem('sarismart_token')
-  const response = await fetch(`/api/store${path}`, {
+  const response = await fetch(`${API_BASE_URL}/store${path}`, {
     method: method ?? (body ? 'POST' : 'GET'),
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     ...(body ? { headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) } : {}),

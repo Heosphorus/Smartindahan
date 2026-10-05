@@ -18,6 +18,7 @@ import {
 } from '../services/authService.js'
 import { sendPasswordResetEmail, sendVerificationEmail } from '../services/emailService.js'
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.js'
+import { parseObjectId } from '../utils/objectId.js'
 
 const OTP_MAX_ATTEMPTS = 5
 const OTP_EXPIRES_MS = 5 * 60 * 1000
@@ -170,12 +171,13 @@ export async function register(req: Request, res: Response): Promise<void> {
 
 export async function verifyEmail(req: Request, res: Response): Promise<void> {
   const { userId, otp } = req.body as { userId?: string; otp?: string }
-  if (!userId || !otp || !mongoose.isValidObjectId(userId) || !validateOtpCode(otp)) {
+  const targetUserId = parseObjectId(userId)
+  if (!targetUserId || !otp || !validateOtpCode(otp)) {
     res.status(400).json({ message: 'A valid 6-digit verification code is required.' })
     return
   }
 
-  const entry = await EmailVerificationModel.findOne({ userId, verified: false }).select('+otpHash')
+  const entry = await EmailVerificationModel.findOne({ userId: targetUserId, verified: false }).select('+otpHash')
   if (!entry) {
     res.status(404).json({ message: 'Verification request not found.' })
     return
@@ -197,7 +199,7 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
     return
   }
 
-  const user = await UserModel.findByIdAndUpdate(userId, { isEmailVerified: true }, { new: true })
+  const user = await UserModel.findByIdAndUpdate(targetUserId, { isEmailVerified: true }, { new: true })
   if (!user) {
     res.status(404).json({ message: 'User not found.' })
     return
@@ -212,25 +214,26 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
 
 export async function resendOtp(req: Request, res: Response): Promise<void> {
   const { userId } = req.body as { userId?: string }
-  if (!userId || !mongoose.isValidObjectId(userId)) {
+  const targetUserId = parseObjectId(userId)
+  if (!targetUserId) {
     res.status(400).json({ message: 'A valid user ID is required.' })
     return
   }
 
-  const user = await UserModel.findById(userId)
+  const user = await UserModel.findById(targetUserId)
   if (!user) {
     res.status(404).json({ message: 'User not found.' })
     return
   }
 
-  const recentRequest = await EmailVerificationModel.findOne({ userId, createdAt: { $gt: new Date(Date.now() - 60 * 1000) } })
+  const recentRequest = await EmailVerificationModel.findOne({ userId: targetUserId, createdAt: { $gt: new Date(Date.now() - 60 * 1000) } })
   if (recentRequest) {
     res.status(429).json({ message: 'Please wait before requesting another code.' })
     return
   }
 
   const otp = generateOtp()
-  await EmailVerificationModel.deleteMany({ userId, verified: false })
+  await EmailVerificationModel.deleteMany({ userId: targetUserId, verified: false })
   await EmailVerificationModel.create({ userId: user._id, otpHash: hashOtp(otp), expiresAt: new Date(Date.now() + OTP_EXPIRES_MS) })
   try {
     await sendVerificationEmail(user.email, otp)
@@ -291,7 +294,8 @@ export async function login(req: Request, res: Response): Promise<void> {
 }
 
 export async function logout(req: AuthenticatedRequest, res: Response): Promise<void> {
-  if (req.user?.id && mongoose.isValidObjectId(req.user.id)) await audit(req, 'LOGOUT', new mongoose.Types.ObjectId(req.user.id))
+  const userId = parseObjectId(req.user?.id)
+  if (userId) await audit(req, 'LOGOUT', userId)
   res.status(200).json({ message: 'Logged out successfully.' })
 }
 
@@ -331,12 +335,13 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
 
 export async function verifyResetOtp(req: Request, res: Response): Promise<void> {
   const { userId, otp } = req.body as { userId?: string; otp?: string }
-  if (!userId || !otp || !mongoose.isValidObjectId(userId) || !validateOtpCode(otp)) {
+  const targetUserId = parseObjectId(userId)
+  if (!targetUserId || !otp || !validateOtpCode(otp)) {
     res.status(400).json({ message: 'A valid reset code is required.' })
     return
   }
 
-  const entry = await PasswordResetModel.findOne({ userId, verified: false }).select('+otpHash')
+  const entry = await PasswordResetModel.findOne({ userId: targetUserId, verified: false }).select('+otpHash')
   if (!entry || entry.expiresAt.getTime() < Date.now()) {
     res.status(410).json({ message: 'This reset code has expired. Please request a new one.' })
     return
@@ -360,7 +365,8 @@ export async function verifyResetOtp(req: Request, res: Response): Promise<void>
 
 export async function resetPassword(req: Request, res: Response): Promise<void> {
   const { userId, password, confirmPassword } = req.body as { userId?: string; password?: string; confirmPassword?: string }
-  if (!userId || !password || !confirmPassword || !mongoose.isValidObjectId(userId)) {
+  const targetUserId = parseObjectId(userId)
+  if (!targetUserId || !password || !confirmPassword) {
     res.status(400).json({ message: 'All password fields are required.' })
     return
   }
@@ -374,13 +380,13 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
     return
   }
 
-  const reset = await PasswordResetModel.findOne({ userId, verified: true, usedAt: { $exists: false } })
+  const reset = await PasswordResetModel.findOne({ userId: targetUserId, verified: true, usedAt: { $exists: false } })
   if (!reset || reset.expiresAt.getTime() < Date.now()) {
     res.status(403).json({ message: 'Verify a valid reset code before changing your password.' })
     return
   }
 
-  const user = await UserModel.findByIdAndUpdate(userId, { $set: { passwordHash: await bcrypt.hash(password, 12), failedLoginAttempts: 0, lockedUntil: undefined }, $inc: { tokenVersion: 1 } }, { new: true })
+  const user = await UserModel.findByIdAndUpdate(targetUserId, { $set: { passwordHash: await bcrypt.hash(password, 12), failedLoginAttempts: 0, lockedUntil: undefined }, $inc: { tokenVersion: 1 } }, { new: true })
   if (!user) {
     res.status(404).json({ message: 'User not found.' })
     return
@@ -393,11 +399,12 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
 }
 
 export async function getCurrentUser(req: AuthenticatedRequest, res: Response): Promise<void> {
-  if (!req.user?.id || !mongoose.isValidObjectId(req.user.id)) {
+  const userId = parseObjectId(req.user?.id)
+  if (!userId) {
     res.status(401).json({ message: 'Invalid session.' })
     return
   }
-  const user = await UserModel.findById(req.user.id)
+  const user = await UserModel.findById(userId)
   if (!user) {
     res.status(404).json({ message: 'User not found.' })
     return

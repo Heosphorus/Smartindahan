@@ -7,6 +7,7 @@ import { InventoryTransactionModel } from '../models/InventoryTransaction.js'
 import { ProductModel } from '../models/Product.js'
 import { SaleModel } from '../models/Sale.js'
 import { recordAuditLog } from '../services/auditService.js'
+import { parseObjectId } from '../utils/objectId.js'
 
 class OperationError extends Error {
   constructor(message: string, readonly statusCode = 400) {
@@ -15,7 +16,7 @@ class OperationError extends Error {
 }
 
 function currentStore(req: AuthenticatedRequest): mongoose.Types.ObjectId | null {
-  return req.user?.storeId && mongoose.isValidObjectId(req.user.storeId) ? new mongoose.Types.ObjectId(req.user.storeId) : null
+  return parseObjectId(req.user?.storeId)
 }
 
 function failSession(res: Response): void { res.status(401).json({ message: 'Invalid session.' }) }
@@ -42,17 +43,19 @@ export async function checkout(req: AuthenticatedRequest, res: Response): Promis
   try {
     let result: { code: string; total: number; profit: number } | null = null
     await session.withTransaction(async () => {
-      const ids = payload.items!.map((item) => item.productId).filter((id): id is string => Boolean(id) && mongoose.isValidObjectId(id))
-      if (ids.length !== payload.items!.length) throw new OperationError('Cart contains an invalid product.')
+      const parsedIds = payload.items!.map((item) => parseObjectId(item.productId))
+      if (parsedIds.some((id) => !id)) throw new OperationError('Cart contains an invalid product.')
+      const ids = parsedIds.filter((id): id is mongoose.Types.ObjectId => id !== null)
       const products = await ProductModel.find({ _id: { $in: ids }, storeId, status: 'active' }).session(session)
-      const byId = new Map(products.map((product) => [product.id, product]))
+      const byId = new Map(products.map((product) => [product._id.toString(), product]))
       const saleItems: Array<{ productId: mongoose.Types.ObjectId; productName: string; quantity: number; unitPrice: number; costPrice: number; lineTotal: number }> = []
       let total = 0
       let profit = 0
 
       for (const item of payload.items!) {
         const quantity = item.quantity
-        const product = item.productId ? byId.get(item.productId) : undefined
+        const productId = parseObjectId(item.productId)
+        const product = productId ? byId.get(productId.toString()) : undefined
         if (!product || !Number.isSafeInteger(quantity) || quantity! < 1) throw new OperationError('Cart contains an invalid quantity or product.')
         const validQuantity = quantity!
         if (product.currentStock < validQuantity) throw new OperationError(`${product.name} has insufficient stock.`, 409)
@@ -87,12 +90,13 @@ export async function stockOut(req: AuthenticatedRequest, res: Response): Promis
   const storeId = currentStore(req)
   if (!storeId) { failSession(res); return }
   const payload = req.body as { productId?: string; quantity?: number; reason?: string; note?: string }
-  if (!payload.productId || !mongoose.isValidObjectId(payload.productId) || !Number.isInteger(payload.quantity) || payload.quantity! < 1) { res.status(400).json({ message: 'Product and positive quantity are required.' }); return }
+  const productId = parseObjectId(payload.productId)
+  if (!productId || !Number.isInteger(payload.quantity) || payload.quantity! < 1) { res.status(400).json({ message: 'Product and positive quantity are required.' }); return }
   const session = await mongoose.startSession()
   let newStock = 0
   try {
     await session.withTransaction(async () => {
-      const product = await ProductModel.findOne({ _id: payload.productId, storeId, status: 'active' }).session(session)
+      const product = await ProductModel.findOne({ _id: productId, storeId, status: 'active' }).session(session)
       if (!product) throw new OperationError('Product not found.', 404)
       if (product.currentStock < payload.quantity!) throw new OperationError('Insufficient stock.', 409)
       const previousStock = product.currentStock
@@ -109,7 +113,7 @@ export async function stockOut(req: AuthenticatedRequest, res: Response): Promis
   } finally {
     await session.endSession()
   }
-  res.status(201).json({ message: 'Stock-out recorded.', product: { id: payload.productId, currentStock: newStock } })
+  res.status(201).json({ message: 'Stock-out recorded.', product: { id: productId.toString(), currentStock: newStock } })
 }
 
 export async function stockIn(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -118,7 +122,7 @@ export async function stockIn(req: AuthenticatedRequest, res: Response): Promise
   const payload = req.body as { items?: Array<{ productId?: string; quantity?: number; unitCost?: number }>; note?: string }
   if (!payload.items?.length) { res.status(400).json({ message: 'At least one stock-in item is required.' }); return }
   for (const item of payload.items) {
-    if (!item.productId || !mongoose.isValidObjectId(item.productId) || typeof item.quantity !== 'number' || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || (item.unitCost !== undefined && (typeof item.unitCost !== 'number' || !Number.isFinite(item.unitCost) || item.unitCost < 0))) {
+    if (!parseObjectId(item.productId) || typeof item.quantity !== 'number' || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || (item.unitCost !== undefined && (typeof item.unitCost !== 'number' || !Number.isFinite(item.unitCost) || item.unitCost < 0))) {
       res.status(400).json({ message: 'Invalid stock-in item.' })
       return
     }
@@ -127,7 +131,9 @@ export async function stockIn(req: AuthenticatedRequest, res: Response): Promise
   try {
     await session.withTransaction(async () => {
       for (const item of payload.items!) {
-        const product = await ProductModel.findOne({ _id: item.productId, storeId, status: 'active' }).session(session)
+        const productId = parseObjectId(item.productId)
+        if (!productId) throw new OperationError('Invalid stock-in item.')
+        const product = await ProductModel.findOne({ _id: productId, storeId, status: 'active' }).session(session)
         if (!product) throw new OperationError('Product not found.', 404)
         const previousStock = product.currentStock
         product.currentStock += item.quantity!
@@ -154,7 +160,7 @@ export async function inventoryCount(req: AuthenticatedRequest, res: Response): 
   if (!payload.counts?.length) { res.status(400).json({ message: 'At least one counted product is required.' }); return }
 
   for (const count of payload.counts) {
-    if (!count.productId || !mongoose.isValidObjectId(count.productId) || typeof count.scannedQuantity !== 'number' || !Number.isInteger(count.scannedQuantity) || count.scannedQuantity < 0) {
+    if (!parseObjectId(count.productId) || typeof count.scannedQuantity !== 'number' || !Number.isInteger(count.scannedQuantity) || count.scannedQuantity < 0) {
       res.status(400).json({ message: 'Invalid inventory count.' })
       return
     }
@@ -163,7 +169,9 @@ export async function inventoryCount(req: AuthenticatedRequest, res: Response): 
   try {
     await session.withTransaction(async () => {
       for (const count of payload.counts!) {
-        const product = await ProductModel.findOne({ _id: count.productId, storeId, status: 'active' }).session(session)
+        const productId = parseObjectId(count.productId)
+        if (!productId) throw new OperationError('Invalid inventory count.')
+        const product = await ProductModel.findOne({ _id: productId, storeId, status: 'active' }).session(session)
         if (!product) throw new OperationError('Product not found.', 404)
         const previousStock = product.currentStock
         product.currentStock = count.scannedQuantity!

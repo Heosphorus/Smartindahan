@@ -9,10 +9,11 @@ import { SaleModel } from '../models/Sale.js'
 import { UserModel } from '../models/User.js'
 import { recordAuditLog } from '../services/auditService.js'
 import { parsePagination } from '../utils/pagination.js'
+import { parseObjectId } from '../utils/objectId.js'
 import { pickRequestFields } from '../utils/requestFields.js'
 
 function storeIdFromRequest(req: AuthenticatedRequest): mongoose.Types.ObjectId | null {
-  return req.user?.storeId && mongoose.isValidObjectId(req.user.storeId) ? new mongoose.Types.ObjectId(req.user.storeId) : null
+  return parseObjectId(req.user?.storeId)
 }
 
 export async function getDashboardSummary(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -172,9 +173,11 @@ export async function bulkCreateProducts(req: AuthenticatedRequest, res: Respons
 export async function updateProduct(req: AuthenticatedRequest, res: Response): Promise<void> {
   const storeId = storeIdFromRequest(req)
   if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
+  const productId = parseObjectId(req.params.id)
+  if (!productId) { res.status(404).json({ message: 'Product not found.' }); return }
   const updates = pickRequestFields(['name', 'barcode', 'sku', 'category', 'brand', 'supplier', 'costPrice', 'sellingPrice', 'minStock', 'unit'], req.body)
   if (!Object.keys(updates).length) { res.status(400).json({ message: 'No editable product fields were provided.' }); return }
-  const product = await ProductModel.findOneAndUpdate({ _id: req.params.id, storeId }, { $set: updates }, { new: true, runValidators: true }).lean()
+  const product = await ProductModel.findOneAndUpdate({ _id: productId, storeId }, { $set: updates }, { new: true, runValidators: true }).lean()
   if (!product) { res.status(404).json({ message: 'Product not found.' }); return }
   await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'PRODUCT_UPDATED', resourceType: 'Product', resourceId: product._id })
   res.json({ product })
@@ -183,7 +186,9 @@ export async function updateProduct(req: AuthenticatedRequest, res: Response): P
 export async function deleteProduct(req: AuthenticatedRequest, res: Response): Promise<void> {
   const storeId = storeIdFromRequest(req)
   if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
-  const product = await ProductModel.findOneAndUpdate({ _id: req.params.id, storeId, status: 'active' }, { $set: { status: 'archived' } }, { new: true, runValidators: true }).lean()
+  const productId = parseObjectId(req.params.id)
+  if (!productId) { res.status(404).json({ message: 'Product not found.' }); return }
+  const product = await ProductModel.findOneAndUpdate({ _id: productId, storeId, status: 'active' }, { $set: { status: 'archived' } }, { new: true, runValidators: true }).lean()
   if (!product) { res.status(404).json({ message: 'Product not found.' }); return }
   await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'PRODUCT_ARCHIVED', resourceType: 'Product', resourceId: product._id })
   res.json({ message: 'Product archived from price list.' })

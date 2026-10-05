@@ -1,6 +1,5 @@
 import { handleAuthenticatedUnauthorized } from './apiSession'
-
-const API_URL = import.meta.env.VITE_API_URL ?? '/api'
+import { API_BASE_URL } from './apiBase'
 
 type ApiResponse = {
   message?: string
@@ -25,7 +24,7 @@ type ApiResponse = {
 }
 
 async function request(path: string, body?: unknown, token?: string): Promise<ApiResponse> {
-  const response = await fetch(`${API_URL}/auth${path}`, {
+  const response = await fetch(`${API_BASE_URL}/auth${path}`, {
     method: body ? 'POST' : 'GET',
     headers: {
       'Content-Type': 'application/json',

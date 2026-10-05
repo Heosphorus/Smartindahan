@@ -1,9 +1,9 @@
 import type { Request, Response, NextFunction } from 'express'
 import jwt, { type JwtPayload } from 'jsonwebtoken'
-import mongoose from 'mongoose'
 
 import { env } from '../config/env.js'
 import { UserModel } from '../models/User.js'
+import { parseObjectId } from '../utils/objectId.js'
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -33,8 +33,8 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
     return
   }
 
-  const id = typeof decoded.id === 'string' ? decoded.id : decoded.sub
-  if (!id || !mongoose.isValidObjectId(id)) {
+  const id = parseObjectId(typeof decoded.id === 'string' ? decoded.id : decoded.sub)
+  if (!id) {
     res.status(401).json({ message: 'Session expired or invalid token.' })
     return
   }
@@ -59,7 +59,7 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
 }
 
 export function requireStoreMembership(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
-  if (!req.user?.storeId || !mongoose.isValidObjectId(req.user.storeId)) {
+  if (!parseObjectId(req.user?.storeId)) {
     res.status(403).json({ message: 'This account is not assigned to a store.' })
     return
   }

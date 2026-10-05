@@ -11,7 +11,7 @@ export type EmailTemplate = {
 }
 
 const transporter = nodemailer.createTransport({
-  host: env.emailHost || 'localhost',
+  host: env.emailHost,
   port: env.emailPort,
   secure: false,
   auth:
