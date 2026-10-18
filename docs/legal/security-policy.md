@@ -2,7 +2,7 @@
 
 ## Security goals
 
-SariSmart aims to protect account access, store data, and operational records from unauthorized deletion, tampering, or disclosure.
+smarTindahan aims to protect account access, store data, and operational records from unauthorized deletion, tampering, or disclosure.
 
 ## Security controls
 

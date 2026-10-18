@@ -2,7 +2,7 @@
 
 ## Retention principles
 
-SariSmart keeps operational and account data only for the time needed to provide the service, maintain accurate records, support business activity, and comply with legal obligations.
+smarTindahan keeps operational and account data only for the time needed to provide the service, maintain accurate records, support business activity, and comply with legal obligations.
 
 ## Examples
 

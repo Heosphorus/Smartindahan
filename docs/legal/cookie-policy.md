@@ -2,7 +2,7 @@
 
 ## Overview
 
-SariSmart uses only minimal browser storage needed to operate the application securely and conveniently. We do not use advertising cookies or third-party tracking cookies for marketing purposes.
+smarTindahan uses only minimal browser storage needed to operate the application securely and conveniently. We do not use advertising cookies or third-party tracking cookies for marketing purposes.
 
 ## Cookies and local storage
 

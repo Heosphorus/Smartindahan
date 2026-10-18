@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This policy defines how SariSmart responds to suspected or actual unauthorized access or exposure of customer or store data.
+This policy defines how smarTindahan responds to suspected or actual unauthorized access or exposure of customer or store data.
 
 ## Response steps
 

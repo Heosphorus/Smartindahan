@@ -4,6 +4,7 @@ import { storeApi, type DashboardSummary } from '../../services/storeApi'
 import { authApi } from '../../services/authApi'
 import { AlertsPage, CustomersPage, ExpensesPage, ReportsPage, SalesPage, SettingsPage, SuppliersPage } from '../business/BusinessPages'
 import { PriceListPage } from './PriceListPage'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import './DashboardControls.css'
 
 const formatPeso = (value: number) => `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -14,6 +15,7 @@ export function StoreOperationsDemo() {
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null)
   const [dashboardError, setDashboardError] = useState('')
   const [showLogoutModal, setShowLogoutModal] = useState(false)
+  useEscapeKey(showLogoutModal, () => setShowLogoutModal(false))
   const [salesPeriod, setSalesPeriod] = useState<'weekly' | 'monthly'>('weekly')
 
   useEffect(() => {
@@ -23,6 +25,16 @@ export function StoreOperationsDemo() {
       .catch((error: unknown) => { if (currentRequest) setDashboardError(error instanceof Error ? error.message : 'Unable to load dashboard data.') })
     return () => { currentRequest = false }
   }, [salesPeriod])
+
+  useEffect(() => {
+    const syncStoreName = (event: Event) => {
+      const detail = (event as CustomEvent<{ storeName?: string }>).detail
+      if (!detail?.storeName) return
+      setDashboard((current) => current ? { ...current, store: { ...current.store, name: detail.storeName! } } : current)
+    }
+    window.addEventListener('smarTindahan:store-profile-updated', syncStoreName)
+    return () => window.removeEventListener('smarTindahan:store-profile-updated', syncStoreName)
+  }, [])
 
   const chartData = dashboard?.salesOverview ?? []
   const chartMax = Math.max(...chartData.map((point) => point.sales), 1)

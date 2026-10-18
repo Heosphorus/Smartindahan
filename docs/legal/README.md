@@ -1,6 +1,6 @@
-# SariSmart legal and security documentation
+# smarTindahan legal and security documentation
 
-This folder contains baseline policies and operational guidance for the SariSmart platform.
+This folder contains baseline policies and operational guidance for the smarTindahan platform.
 
 ## Included policies
 

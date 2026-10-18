@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CartItem } from '../../types'
 import { formatCurrency, shouldIgnoreDuplicateScan } from '../scanner/scannerUtils'
 import { storeApi, type ProductRecord } from '../../services/storeApi'
+import { lookupPublicProduct, type PublicProductDetails } from '../../services/openFoodFacts'
+import { BarcodeCameraScanner } from './BarcodeCameraScanner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
+import './POSFlow.css'
+
+type NewProductForm = { name: string; brand: string; category: string; barcode: string; costPrice: string; sellingPrice: string; initialStock: string; minStock: string; unit: string }
+const emptyNewProduct = (barcode: string): NewProductForm => ({ name: '', brand: '', category: '', barcode, costPrice: '', sellingPrice: '', initialStock: '0', minStock: '0', unit: 'piece' })
 
 export function POSFlow() {
   const [cart, setCart] = useState<CartItem[]>([])
@@ -9,13 +16,21 @@ export function POSFlow() {
   const [status, setStatus] = useState('Ready to scan')
   const [barcodeInput, setBarcodeInput] = useState('')
   const [lastBarcode, setLastBarcode] = useState('None')
+  const [cameraOpen, setCameraOpen] = useState(false)
+  const [unknownBarcode, setUnknownBarcode] = useState('')
+  const [publicDetails, setPublicDetails] = useState<PublicProductDetails | null>(null)
+  const [publicLookupStatus, setPublicLookupStatus] = useState('')
+  const [newProductForm, setNewProductForm] = useState<NewProductForm>(emptyNewProduct(''))
+  const [isCreatingProduct, setIsCreatingProduct] = useState(false)
+  const closeUnknownProduct = useCallback(() => setUnknownBarcode(''), [])
+  useEscapeKey(Boolean(unknownBarcode) && !cameraOpen, closeUnknownProduct)
   const lastScanRef = useRef({ value: '', time: 0 })
 
   useEffect(() => {
     storeApi.products().then((response) => setProducts(response.products)).catch((error: unknown) => setStatus(error instanceof Error ? error.message : 'Unable to load products'))
   }, [])
 
-  const addToCart = (product: ProductRecord, quantity = 1) => {
+  const addToCart = useCallback((product: ProductRecord, quantity = 1) => {
     const productId = product._id ?? product.id
     if (!productId) return
     setCart((current) => {
@@ -40,9 +55,9 @@ export function POSFlow() {
         },
       ]
     })
-  }
+  }, [])
 
-  const handleScan = async (rawValue: string) => {
+  const handleScan = useCallback(async (rawValue: string) => {
     const normalized = rawValue.trim()
     const now = Date.now()
 
@@ -57,15 +72,71 @@ export function POSFlow() {
       const response = await storeApi.lookupProduct(normalized)
       if (!response.product) {
         setStatus('Barcode not registered')
+        setUnknownBarcode(normalized)
+        setNewProductForm(emptyNewProduct(normalized))
+        setPublicDetails(null)
+        setPublicLookupStatus('')
         return
       }
+      setUnknownBarcode('')
       addToCart(response.product, 1)
       setStatus(`${response.product.name} added to cart`)
       if (navigator.vibrate) navigator.vibrate(80)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Unable to look up barcode')
     }
+  }, [addToCart])
+
+  const handlePublicLookup = async () => {
+    if (!unknownBarcode) return
+    setPublicLookupStatus('Looking up product details…')
+    try {
+      const details = await lookupPublicProduct(unknownBarcode)
+      if (!details) {
+        setPublicLookupStatus('No public details were found. You can enter the product information manually.')
+        return
+      }
+      setPublicDetails(details)
+      setNewProductForm((current) => ({ ...current, name: details.name || current.name, brand: details.brand || current.brand, category: details.category || current.category }))
+      setPublicLookupStatus('Details found. Review them and add your store prices and stock.')
+    } catch (error) {
+      setPublicLookupStatus(error instanceof Error ? error.message : 'Could not look up public product details.')
+    }
   }
+
+  const handleCreateProduct = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const costPrice = Number(newProductForm.costPrice)
+    const sellingPrice = Number(newProductForm.sellingPrice)
+    const initialStock = Number(newProductForm.initialStock)
+    const minStock = Number(newProductForm.minStock)
+    if (!Number.isFinite(costPrice) || costPrice < 0 || !Number.isFinite(sellingPrice) || sellingPrice < 0 || !Number.isInteger(initialStock) || initialStock < 0) {
+      setPublicLookupStatus('Enter valid non-negative prices and a whole, non-negative starting stock quantity.')
+      return
+    }
+    if (!Number.isInteger(minStock) || minStock < 0 || !newProductForm.unit.trim()) {
+      setPublicLookupStatus('Enter a whole, non-negative low stock alert and a unit.')
+      return
+    }
+    setIsCreatingProduct(true)
+    try {
+      const { product } = await storeApi.addProduct({ ...newProductForm, costPrice, sellingPrice, initialStock, minStock, unit: newProductForm.unit.trim() })
+      setProducts((current) => [...current, product])
+      setUnknownBarcode('')
+      setBarcodeInput('')
+      setPublicLookupStatus('Product added to your catalog. Prices and stock were saved to your store.')
+      setStatus(`${product.name} added to catalog`)
+    } catch (error) {
+      setPublicLookupStatus(error instanceof Error ? error.message : 'Could not add this product.')
+    } finally {
+      setIsCreatingProduct(false)
+    }
+  }
+
+  const handleCameraDetected = useCallback((barcode: string) => {
+    setCameraOpen(false)
+    void handleScan(barcode)
+  }, [handleScan])
 
   const completeCheckout = async () => {
     try {
@@ -83,18 +154,34 @@ export function POSFlow() {
   )
 
   return (
+    <>
     <div className="theme-inline-panel" style={styles.card}>
       <div style={styles.headerRow}>
         <div>
           <p style={styles.kicker}>POS</p>
           <h3 style={styles.title}>Scan to cart</h3>
         </div>
-        <button style={styles.primaryButton} onClick={() => void handleScan(barcodeInput || products[0]?.barcode || '')}>
-          Scan
-        </button>
+        <button className="pos-primary" type="button" onClick={() => setCameraOpen(true)}>Scan with camera</button>
       </div>
 
-      <input aria-label="Barcode" placeholder="Enter barcode manually" value={barcodeInput} onChange={(event) => setBarcodeInput(event.target.value)} style={styles.barcodeInput} />
+      <div className="pos-manual-scan"><label htmlFor="pos-barcode">Or enter barcode manually</label><div><input id="pos-barcode" aria-label="Barcode" placeholder="Enter barcode manually" value={barcodeInput} onChange={(event) => setBarcodeInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void handleScan(barcodeInput) } }} maxLength={64} /><button className="pos-secondary" type="button" onClick={() => void handleScan(barcodeInput)} disabled={!barcodeInput.trim()}>Look up</button></div></div>
+
+      {unknownBarcode && <div className="pos-add-product-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isCreatingProduct) closeUnknownProduct() }}><section className="pos-enrichment pos-add-product-dialog" role="dialog" aria-modal="true" aria-labelledby="pos-enrichment-title">
+        <div className="pos-enrichment-heading"><div><p className="pos-modal-eyebrow">BARCODE NOT IN CATALOG</p><h4 id="pos-enrichment-title">Add this product?</h4><p>Scanned barcode: <strong>{unknownBarcode}</strong></p></div><div className="pos-enrichment-actions"><button type="button" className="pos-secondary" onClick={() => void handlePublicLookup()} disabled={publicLookupStatus.startsWith('Looking up') || isCreatingProduct}>Look up details</button><button type="button" className="pos-enrichment-dismiss" onClick={closeUnknownProduct} disabled={isCreatingProduct}>Cancel</button></div></div>
+        {publicLookupStatus && <p className="pos-lookup-status" role="status">{publicLookupStatus}</p>}
+        {publicDetails && <p className="pos-public-source">Community-sourced name, brand, and category from <a href="https://world.openfoodfacts.org" target="_blank" rel="noreferrer">Open Food Facts</a>. Review before saving. Prices and stock are entered by you.</p>}
+        <form onSubmit={(event) => void handleCreateProduct(event)} className="pos-new-product-form">
+          <label>Product name<input value={newProductForm.name} maxLength={64} required onChange={(event) => setNewProductForm((current) => ({ ...current, name: event.target.value }))} /></label>
+          <label>Brand<input value={newProductForm.brand} maxLength={64} onChange={(event) => setNewProductForm((current) => ({ ...current, brand: event.target.value }))} /></label>
+          <label>Category<input value={newProductForm.category} maxLength={64} required onChange={(event) => setNewProductForm((current) => ({ ...current, category: event.target.value }))} /></label>
+          <label>Cost per unit (PHP)<input type="number" min="0" step="0.01" value={newProductForm.costPrice} required onChange={(event) => setNewProductForm((current) => ({ ...current, costPrice: event.target.value }))} /></label>
+          <label>Selling price (PHP)<input type="number" min="0" step="0.01" value={newProductForm.sellingPrice} required onChange={(event) => setNewProductForm((current) => ({ ...current, sellingPrice: event.target.value }))} /></label>
+          <label>Starting stock (pieces)<input type="number" min="0" step="1" value={newProductForm.initialStock} required onChange={(event) => setNewProductForm((current) => ({ ...current, initialStock: event.target.value }))} /></label>
+          <label>Low stock alert at<input type="number" min="0" step="1" value={newProductForm.minStock} required onChange={(event) => setNewProductForm((current) => ({ ...current, minStock: event.target.value }))} /></label>
+          <label>Unit<input value={newProductForm.unit} maxLength={64} required onChange={(event) => setNewProductForm((current) => ({ ...current, unit: event.target.value }))} /></label>
+          <button type="submit" className="pos-primary" disabled={isCreatingProduct}>{isCreatingProduct ? 'Adding…' : 'Add to catalog'}</button>
+        </form>
+      </section></div>}
 
       <div style={styles.summaryBox}>
         <div>
@@ -131,6 +218,8 @@ export function POSFlow() {
         <button style={styles.primaryButton} onClick={() => void completeCheckout()} disabled={!cart.length}>Complete Checkout</button>
       </div>
     </div>
+    {cameraOpen && <BarcodeCameraScanner onDetected={handleCameraDetected} onClose={() => setCameraOpen(false)} />}
+    </>
   )
 }
 

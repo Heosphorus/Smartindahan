@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { authApi } from '../../services/authApi'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import './AdminPages.css'
 
 type AdminUser = {
@@ -73,6 +74,13 @@ export function AdminUsers() {
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [newEmail, setNewEmail] = useState('')
+  useEscapeKey(showPasswordModal || showEmailModal, () => {
+    setShowPasswordModal(false)
+    setShowEmailModal(false)
+    setNewPassword('')
+    setNewEmail('')
+    setSelectedUser(null)
+  })
 
   useEffect(() => {
     if (!token) return

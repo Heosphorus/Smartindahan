@@ -2,7 +2,7 @@
 
 ## Scope
 
-These terms govern the use of SariSmart by store owners, managers, and authorized users who access the system for commercial operations.
+These terms govern the use of smarTindahan by store owners, managers, and authorized users who access the system for commercial operations.
 
 ## User responsibilities
 
@@ -13,7 +13,7 @@ These terms govern the use of SariSmart by store owners, managers, and authorize
 
 ## Service availability
 
-SariSmart is provided as a service platform and may be updated, maintained, or temporarily restricted to protect performance and security. Availability is not guaranteed at all times.
+smarTindahan is provided as a service platform and may be updated, maintained, or temporarily restricted to protect performance and security. Availability is not guaranteed at all times.
 
 ## Prohibited conduct
 

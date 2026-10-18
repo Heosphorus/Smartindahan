@@ -136,20 +136,20 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
   }
 
   const isCodeMode = mode === 'verify' || mode === 'reset'
-  const title = mode === 'register' ? 'Create your SariSmart account' : mode === 'verify' ? 'Verify your email' : mode === 'forgot' ? 'Forgot your password?' : mode === 'reset' ? 'Reset your password' : 'Welcome back to SariSmart'
+  const title = mode === 'register' ? 'Create your smarTindahan account' : mode === 'verify' ? 'Verify your email' : mode === 'forgot' ? 'Forgot your password?' : mode === 'reset' ? 'Reset your password' : 'Welcome back to smarTindahan'
 
   return (
     <main className="auth-page">
       <section className="auth-brand-panel">
         <div className="auth-brand-mark">S</div>
-        <p className="auth-eyebrow">SARISMART / STORE OS</p>
+        <p className="auth-eyebrow">SMARTINDAHAN / STORE OS</p>
         <h1>Smarter tools for your tindahan.</h1>
         <p>Keep every sale, shelf, and stock movement in one clear place.</p>
         <div className="auth-brand-footer">Built for everyday store owners.</div>
       </section>
       <section className="auth-form-panel">
         <div className="auth-form-wrap">
-          <div className="auth-mobile-brand"><span className="auth-brand-mark">S</span><strong>SariSmart</strong></div>
+          <div className="auth-mobile-brand"><span className="auth-brand-mark">S</span><strong>smarTindahan</strong></div>
           <p className="auth-kicker">SECURE STORE ACCESS</p>
           <h2>{title}</h2>
           {mode === 'verify' && <p className="auth-helper">We sent a 6-digit code to <strong>{maskedEmail}</strong></p>}

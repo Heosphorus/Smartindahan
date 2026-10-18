@@ -2,7 +2,7 @@
 
 ## Overview
 
-SariSmart helps small businesses manage store operations, sales, inventory, customers, and suppliers. To provide the service, we process the minimum personal data needed to create and secure a user account and operate the business tools associated with the store.
+smarTindahan helps small businesses manage store operations, sales, inventory, customers, and suppliers. To provide the service, we process the minimum personal data needed to create and secure a user account and operate the business tools associated with the store.
 
 ## Information collected
 

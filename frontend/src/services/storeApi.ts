@@ -36,7 +36,7 @@ async function storeRequest<T>(path: string, body?: unknown, method?: string): P
 
 export const storeApi = {
   dashboard: (period: 'weekly' | 'monthly' = 'weekly') => storeRequest<{ store: DashboardSummary['store']; kpis: DashboardSummary['kpis']; salesOverviewPeriod: DashboardSummary['salesOverviewPeriod']; salesOverview: DashboardSummary['salesOverview']; topSelling: DashboardSummary['topSelling']; lowStock: DashboardSummary['lowStock']; recentTransactions: DashboardSummary['recentTransactions'] }>(`/dashboard?period=${period}`),
-  products: () => storeRequest<{ products: ProductRecord[] }>('/products'),
+  products: (page = 1, limit = 100) => storeRequest<{ products: ProductRecord[]; pagination: { page: number; limit: number; total: number } }>(`/products?page=${page}&limit=${limit}`),
   addProduct: (payload: Record<string, unknown>) => storeRequest<{ product: ProductRecord }>('/products', payload),
   bulkAddProducts: (names: string[], category: string, unit: string) => storeRequest<{ products: ProductRecord[]; message: string }>('/products/bulk', { names, category, unit }),
   updateProduct: (id: string, payload: Record<string, unknown>) => storeRequest<{ product: ProductRecord }>(`/products/${id}`, payload, 'PATCH'),

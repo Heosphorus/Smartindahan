@@ -5,7 +5,7 @@ export type PolicyKind = 'privacy' | 'terms' | 'cookies' | 'security' | 'retenti
 const policyContent: Record<PolicyKind, { title: string; summary: string; sections: Array<{ heading: string; body: string }> }> = {
   privacy: {
     title: 'Privacy Policy',
-    summary: 'SariSmart collects only the information required to operate store accounts, verify identities, and support daily sales workflows.',
+    summary: 'smarTindahan collects only the information required to operate store accounts, verify identities, and support daily sales workflows.',
     sections: [
       { heading: 'Information we collect', body: 'We collect account data such as your name, email, phone number, store name, and address so you can create a secure store account and access your dashboard. We also store operational data such as inventory, customer balances, supplier records, sales, and transactions associated with your store.' },
       { heading: 'How we use data', body: 'We use your data to authenticate you, maintain your store records, send verification and reset codes, support customer and inventory workflows, and protect the security of the system through audit logging and account protection measures.' },
@@ -15,17 +15,17 @@ const policyContent: Record<PolicyKind, { title: string; summary: string; sectio
   },
   terms: {
     title: 'Terms of Service',
-    summary: 'These terms govern your use of SariSmart and the obligations of both the user and the service provider.',
+    summary: 'These terms govern your use of smarTindahan and the obligations of both the user and the service provider.',
     sections: [
       { heading: 'Account responsibility', body: 'You are responsible for the confidentiality of your account credentials and for the accuracy of the information you provide when registering a store account.' },
-      { heading: 'Permitted use', body: 'SariSmart may be used for lawful store operations, product tracking, customer management, and sales reporting. You may not use the platform to engage in fraud, data theft, abusive activity, or other prohibited behavior.' },
+      { heading: 'Permitted use', body: 'smarTindahan may be used for lawful store operations, product tracking, customer management, and sales reporting. You may not use the platform to engage in fraud, data theft, abusive activity, or other prohibited behavior.' },
       { heading: 'Service availability', body: 'We work to maintain uptime and appropriate security controls, but we do not guarantee uninterrupted availability or error-free service. We may suspend access as needed to protect the platform or investigate security concerns.' },
-      { heading: 'Limitation of liability', body: 'SariSmart is provided on an as-is basis. We do not guarantee business outcomes, and our liability is limited to the extent permitted by the applicable law.' },
+      { heading: 'Limitation of liability', body: 'smarTindahan is provided on an as-is basis. We do not guarantee business outcomes, and our liability is limited to the extent permitted by the applicable law.' },
     ],
   },
   cookies: {
     title: 'Cookie Policy',
-    summary: 'SariSmart uses minimal cookies and local browser storage to support secure sessions and application functionality.',
+    summary: 'smarTindahan uses minimal cookies and local browser storage to support secure sessions and application functionality.',
     sections: [
       { heading: 'Session cookies', body: 'We use a secure session token so authenticated users remain signed in during an active session. This token is kept in local storage or browser memory and is required for protected requests.' },
       { heading: 'Preference storage', body: 'The app may store non-sensitive user preferences or local UI state in the browser to improve usability and maintain a smoother experience.' },
@@ -43,7 +43,7 @@ const policyContent: Record<PolicyKind, { title: string; summary: string; sectio
   },
   retention: {
     title: 'Data Retention Policy',
-    summary: 'SariSmart retains operational and account data only for as long as needed to provide services, satisfy legal obligations, or support legitimate business operations.',
+    summary: 'smarTindahan retains operational and account data only for as long as needed to provide services, satisfy legal obligations, or support legitimate business operations.',
     sections: [
       { heading: 'Operational data', body: 'Store records, sales, inventory activity, customer balances, and supplier documents are retained while the account remains active and for a reasonable period afterward when required to support reporting or compliance needs.' },
       { heading: 'Account lifecycle', body: 'If an account is deactivated or deleted, associated personal data is removed or archived in line with approved retention rules and any legal obligations that apply.' },
@@ -52,7 +52,7 @@ const policyContent: Record<PolicyKind, { title: string; summary: string; sectio
   },
   breach: {
     title: 'Data Breach Response Policy',
-    summary: 'SariSmart is designed to detect, contain, assess, and respond to security incidents in a timely and documented manner.',
+    summary: 'smarTindahan is designed to detect, contain, assess, and respond to security incidents in a timely and documented manner.',
     sections: [
       { heading: 'Detection and notification', body: 'Unauthorized access patterns, suspicious activity, and abnormal authentication behavior are monitored through application logs and audit records. We aim to assess potential exposure quickly and notify affected stakeholders when required.' },
       { heading: 'Containment', body: 'The system may disable affected accounts, revoke sessions, rotate credentials, and isolate suspicious activity as part of incident response.' },
@@ -81,16 +81,17 @@ const policyContent: Record<PolicyKind, { title: string; summary: string; sectio
 
 export function PolicyModal({ kind, onClose }: { kind: PolicyKind; onClose: () => void }) {
   const content = policyContent[kind]
+  useEscapeKey(true, onClose)
 
   return (
     <div className="policy-modal-backdrop" onClick={onClose}>
       <div className="policy-modal" onClick={(event) => event.stopPropagation()}>
         <div className="policy-modal-header">
           <div>
-            <p className="policy-modal-label">SariSmart policy</p>
+            <p className="policy-modal-label">smarTindahan policy</p>
             <h3>{content.title}</h3>
           </div>
-          <button type="button" className="policy-close" aria-label="Close policy" onClick={onClose}>×</button>
+          <button type="button" className="policy-close" aria-label="Close policy" onClick={onClose}>&times;</button>
         </div>
         <p className="policy-summary">{content.summary}</p>
         <div className="policy-sections">
@@ -105,3 +106,4 @@ export function PolicyModal({ kind, onClose }: { kind: PolicyKind; onClose: () =
     </div>
   )
 }
+import { useEscapeKey } from '../../hooks/useEscapeKey'

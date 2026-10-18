@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { businessApi, type Customer, type Alert, type Expense, type Report, type Sale, type Settings, type Supplier } from '../../services/businessApi'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { authApi } from '../../services/authApi'
-import { accentOptions, getThemePreferences, saveThemePreferences, type ThemeMode } from '../../services/themePreferences'
+import { accentOptions, fontOptions, fontSizeOptions, getThemePreferences, saveThemePreferences, type ThemeMode } from '../../services/themePreferences'
 import './BusinessPages.css'
 import './SettingsPage.css'
 import './ThemeSettings.css'
@@ -9,6 +10,7 @@ import './ThemeSettings.css'
 const formatPeso = (value: number) => `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 function DeleteConfirmationModal({ isOpen, onClose, onConfirm, itemName }: { isOpen: boolean; onClose: () => void; onConfirm: () => void; itemName: string }) {
+  useEscapeKey(isOpen, onClose)
   if (!isOpen) return null
   return (
     <div className="delete-backdrop">
@@ -26,12 +28,14 @@ function DeleteConfirmationModal({ isOpen, onClose, onConfirm, itemName }: { isO
 }
 
 function EntryFormModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEscapeKey(true, onClose)
+  const eyebrow = title.toLowerCase().includes('customer') ? 'CUSTOMER DETAILS' : title.toLowerCase().includes('supplier') ? 'SUPPLIER DETAILS' : 'EXPENSE DETAILS'
   return (
     <div className="modal-backdrop">
       <section className="modal-dialog entry-form-dialog" role="dialog" aria-modal="true" aria-label={title}>
         <header className="modal-header">
-          <h3>{title}</h3>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="Close form">×</button>
+          <div><p className="entry-form-eyebrow">{eyebrow}</p><h3>{title}</h3></div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close form">&times;</button>
         </header>
         <div className="modal-body">{children}</div>
       </section>
@@ -183,15 +187,15 @@ export function CustomersPage() {
       </button>
 
       {showAddForm && (
-        <EntryFormModal title={editingCustomer ? 'Edit customer' : 'Add customer'} onClose={() => setShowAddForm(false)}>
+        <EntryFormModal title={editingCustomer ? 'Edit customer' : 'Add customer'} onClose={() => { setShowAddForm(false); setEditingCustomer(null); setFormData({ name: '', mobileNumber: '', address: '', creditLimit: '' }) }}>
           <form onSubmit={editingCustomer ? handleUpdateCustomer : handleAddCustomer} className="customer-form">
             <label>Name<input placeholder="Name" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required /></label>
             <label>Contact number<input placeholder="Contact number" value={formData.mobileNumber} onChange={e => setFormData({ ...formData, mobileNumber: e.target.value })} /></label>
             <label>Address<input placeholder="Address" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} /></label>
             <label>Credit limit<input type="number" min="0" placeholder="Credit limit" value={formData.creditLimit} onChange={e => setFormData({ ...formData, creditLimit: e.target.value })} /></label>
             <div className="form-actions">
-              <button type="submit" className="btn-primary">{editingCustomer ? 'Update Customer' : 'Add Customer'}</button>
-              <button type="button" className="btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
+              <button type="button" className="btn-secondary" onClick={() => { setShowAddForm(false); setEditingCustomer(null); setFormData({ name: '', mobileNumber: '', address: '', creditLimit: '' }) }}>Cancel</button>
+              <button type="submit" className="btn-primary">{editingCustomer ? 'Save customer' : 'Add customer'}</button>
             </div>
           </form>
         </EntryFormModal>
@@ -205,8 +209,8 @@ export function CustomersPage() {
             <div key={customer._id} className="customer-card">
               <div className="customer-info">
                 <h3>{customer.name}</h3>
-                {customer.mobileNumber && <p>📱 {customer.mobileNumber}</p>}
-                {customer.address && <p>📍 {customer.address}</p>}
+                {customer.mobileNumber && <p>Contact number: {customer.mobileNumber}</p>}
+                {customer.address && <p>Address: {customer.address}</p>}
               </div>
               <div className="customer-utang">
                 <div className="utang-row">
@@ -345,15 +349,15 @@ export function ExpensesPage() {
       </button>
 
       {showAddForm && (
-        <EntryFormModal title={editingExpense ? 'Edit expense' : 'Add expense'} onClose={() => setShowAddForm(false)}>
+        <EntryFormModal title={editingExpense ? 'Edit expense' : 'Add expense'} onClose={() => { setShowAddForm(false); setEditingExpense(null); setFormData({ category: '', description: '', amount: '', expenseDate: '' }) }}>
           <form onSubmit={editingExpense ? handleUpdateExpense : handleAddExpense} className="customer-form">
             <label>Category<input placeholder="Category" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} required /></label>
             <label>Description<input placeholder="Description" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} required /></label>
             <label>Amount<input type="number" min="0.01" step="0.01" placeholder="Amount" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} required /></label>
             <label>Date<input type="date" value={formData.expenseDate} onChange={e => setFormData({ ...formData, expenseDate: e.target.value })} required /></label>
             <div className="form-actions">
-              <button type="submit" className="btn-primary">{editingExpense ? 'Update Expense' : 'Add Expense'}</button>
-              <button type="button" className="btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
+              <button type="button" className="btn-secondary" onClick={() => { setShowAddForm(false); setEditingExpense(null); setFormData({ category: '', description: '', amount: '', expenseDate: '' }) }}>Cancel</button>
+              <button type="submit" className="btn-primary">{editingExpense ? 'Save expense' : 'Add expense'}</button>
             </div>
           </form>
         </EntryFormModal>
@@ -539,7 +543,6 @@ export function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [editing, setEditing] = useState(false)
   const [showPasswordForm, setShowPasswordForm] = useState(false)
   const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', mobileNumber: '', storeName: '', storeAddress: '' })
   const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
@@ -561,12 +564,23 @@ export function SettingsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleUpdateSettings = async (e: React.FormEvent) => {
+  const handleUpdateSettings = async (e: React.FormEvent, fields: Partial<Settings>) => {
     e.preventDefault()
     try {
-      const result = await businessApi.updateSettings(formData)
+      const result = await businessApi.updateSettings(fields)
       setSettings(result.settings)
-      setEditing(false)
+      setFormData(current => ({
+        ...result.settings,
+        ...(fields.firstName === undefined ? { firstName: current.firstName } : {}),
+        ...(fields.lastName === undefined ? { lastName: current.lastName } : {}),
+        ...(fields.mobileNumber === undefined ? { mobileNumber: current.mobileNumber } : {}),
+        ...(fields.storeName === undefined ? { storeName: current.storeName } : {}),
+        ...(fields.storeAddress === undefined ? { storeAddress: current.storeAddress } : {}),
+      }))
+      if (fields.storeName !== undefined) {
+        window.dispatchEvent(new CustomEvent('smarTindahan:store-profile-updated', { detail: { storeName: result.settings.storeName } }))
+      }
+      setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update settings')
     }
@@ -603,9 +617,8 @@ export function SettingsPage() {
           <h2>Settings</h2>
           <p>Manage your contact details and store profile.</p>
         </div>
-        {settings && !editing && (
+        {settings && (
           <div className="settings-heading-actions">
-            <button onClick={() => setEditing(true)} className="btn-primary" type="button">Edit settings</button>
             <button onClick={() => setShowPasswordForm(!showPasswordForm)} className="btn-secondary" type="button">
               {showPasswordForm ? 'Hide password form' : 'Change password'}
             </button>
@@ -619,7 +632,7 @@ export function SettingsPage() {
         <div className="settings-section-heading">
           <div>
             <h3 id="appearance-heading">Appearance</h3>
-            <p>Choose the color and display mode used across SariSmart.</p>
+            <p>Choose the color and display mode used across smarTindahan.</p>
           </div>
         </div>
         <div className="appearance-controls">
@@ -659,59 +672,47 @@ export function SettingsPage() {
               ))}
             </div>
           </fieldset>
+          <label className="appearance-select">
+            <span>Font family</span>
+            <select value={themePreferences.fontFamily} onChange={(event) => updateThemePreference({ fontFamily: event.target.value as typeof themePreferences.fontFamily })}>
+              {fontOptions.map((font) => <option key={font.id} value={font.id}>{font.name}</option>)}
+            </select>
+          </label>
+          <label className="appearance-select">
+            <span>Text size</span>
+            <select value={themePreferences.fontSize} onChange={(event) => updateThemePreference({ fontSize: event.target.value as typeof themePreferences.fontSize })}>
+              {fontSizeOptions.map((size) => <option key={size.id} value={size.id}>{size.name}</option>)}
+            </select>
+          </label>
         </div>
       </section>
 
       {settings && (
         <>
-          {!editing ? (
-            <div className="settings-sections">
-              <section className="settings-section">
-                <div className="settings-section-heading">
-                  <div><h3>Owner profile</h3><p>Personal details used for your account.</p></div>
-                  <span className="settings-section-mark" aria-hidden="true">01</span>
-                </div>
-                <dl className="settings-details">
-                  <div><dt>Full name</dt><dd>{settings.firstName} {settings.lastName}</dd></div>
-                  <div><dt>Email</dt><dd>{settings.email}</dd></div>
-                  <div><dt>Contact number</dt><dd>{settings.mobileNumber}</dd></div>
-                </dl>
-              </section>
-              <section className="settings-section">
-                <div className="settings-section-heading">
-                  <div><h3>Store profile</h3><p>Business details shown in SariSmart.</p></div>
-                  <span className="settings-section-mark" aria-hidden="true">02</span>
-                </div>
-                <dl className="settings-details">
-                  <div><dt>Store name</dt><dd>{settings.storeName}</dd></div>
-                  <div><dt>Store address</dt><dd>{settings.storeAddress}</dd></div>
-                </dl>
-              </section>
-            </div>
-          ) : (
-            <form onSubmit={handleUpdateSettings} className="settings-editor">
+            <div className="settings-editor settings-always-editable">
               <section className="settings-section">
                 <div className="settings-section-heading"><div><h3>Owner profile</h3><p>Update the details associated with your account.</p></div></div>
-                <div className="settings-fields">
-                  <label>First name<input placeholder="First name" value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} required /></label>
-                  <label>Last name<input placeholder="Last name" value={formData.lastName} onChange={e => setFormData({ ...formData, lastName: e.target.value })} required /></label>
-                  <label>Email<input placeholder="Email" type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} required /></label>
-                  <label>Contact number<input placeholder="Contact number" value={formData.mobileNumber} onChange={e => setFormData({ ...formData, mobileNumber: e.target.value })} required /></label>
-                </div>
+                <form onSubmit={(event) => handleUpdateSettings(event, { firstName: formData.firstName, lastName: formData.lastName, mobileNumber: formData.mobileNumber })}>
+                  <div className="settings-fields">
+                    <label>First name<input placeholder="First name" value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} required /></label>
+                    <label>Last name<input placeholder="Last name" value={formData.lastName} onChange={e => setFormData({ ...formData, lastName: e.target.value })} required /></label>
+                    <label>Account email<input type="email" value={settings.email} readOnly aria-describedby="account-email-note" /><small id="account-email-note">Email changes are managed separately to protect account access.</small></label>
+                    <label>Contact number<input placeholder="Contact number" value={formData.mobileNumber} onChange={e => setFormData({ ...formData, mobileNumber: e.target.value })} required /></label>
+                  </div>
+                  <div className="form-actions"><button type="submit" className="btn-primary">Save owner profile</button></div>
+                </form>
               </section>
               <section className="settings-section">
                 <div className="settings-section-heading"><div><h3>Store profile</h3><p>Update how your business is identified.</p></div></div>
-                <div className="settings-fields">
-                  <label>Store name<input placeholder="Store name" value={formData.storeName} onChange={e => setFormData({ ...formData, storeName: e.target.value })} required /></label>
-                  <label>Store address<input placeholder="Store address" value={formData.storeAddress} onChange={e => setFormData({ ...formData, storeAddress: e.target.value })} required /></label>
-                </div>
+                <form onSubmit={(event) => handleUpdateSettings(event, { storeName: formData.storeName, storeAddress: formData.storeAddress })}>
+                  <div className="settings-fields">
+                    <label>Store name<input placeholder="Store name" value={formData.storeName} onChange={e => setFormData({ ...formData, storeName: e.target.value })} required /></label>
+                    <label>Store address<input placeholder="Store address" value={formData.storeAddress} onChange={e => setFormData({ ...formData, storeAddress: e.target.value })} required /></label>
+                  </div>
+                  <div className="form-actions"><button type="submit" className="btn-primary">Save store profile</button></div>
+                </form>
               </section>
-              <div className="form-actions">
-                <button type="submit" className="btn-primary">Save changes</button>
-                <button type="button" onClick={() => { setEditing(false); setFormData(settings) }} className="btn-secondary">Cancel</button>
-              </div>
-            </form>
-          )}
+            </div>
 
           {showPasswordForm && (
             <form onSubmit={handleChangePassword} className="settings-editor password-editor">
@@ -769,6 +770,7 @@ export function SuppliersPage() {
 
   const handleEditSupplier = (supplier: Supplier) => {
     setEditingSupplier(supplier)
+    setShowAddForm(true)
     setFormData({
       name: supplier.name,
       contactNumber: supplier.contactNumber || '',
@@ -787,6 +789,7 @@ export function SuppliersPage() {
       })
       setSuppliers(suppliers.map(s => s._id === editingSupplier._id ? result.supplier : s))
       setEditingSupplier(null)
+      setShowAddForm(false)
       setFormData({ name: '', contactNumber: '', address: '' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update supplier')
@@ -828,14 +831,14 @@ export function SuppliersPage() {
       </button>
 
       {showAddForm && (
-        <EntryFormModal title={editingSupplier ? 'Edit supplier' : 'Add supplier'} onClose={() => setShowAddForm(false)}>
+        <EntryFormModal title={editingSupplier ? 'Edit supplier' : 'Add supplier'} onClose={() => { setShowAddForm(false); setEditingSupplier(null); setFormData({ name: '', contactNumber: '', address: '' }) }}>
           <form onSubmit={editingSupplier ? handleUpdateSupplier : handleAddSupplier} className="customer-form">
             <label>Name<input placeholder="Name" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required /></label>
             <label>Contact number<input placeholder="Contact number" value={formData.contactNumber} onChange={e => setFormData({ ...formData, contactNumber: e.target.value })} /></label>
             <label>Address<input placeholder="Address" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} /></label>
             <div className="form-actions">
-              <button type="submit" className="btn-primary">{editingSupplier ? 'Update Supplier' : 'Add Supplier'}</button>
-              <button type="button" className="btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
+              <button type="button" className="btn-secondary" onClick={() => { setShowAddForm(false); setEditingSupplier(null); setFormData({ name: '', contactNumber: '', address: '' }) }}>Cancel</button>
+              <button type="submit" className="btn-primary">{editingSupplier ? 'Save supplier' : 'Add supplier'}</button>
             </div>
           </form>
         </EntryFormModal>
@@ -849,8 +852,8 @@ export function SuppliersPage() {
             <div key={supplier._id} className="customer-card">
               <div className="customer-info">
                 <h3>{supplier.name}</h3>
-                {supplier.contactNumber && <p>📱 {supplier.contactNumber}</p>}
-                {supplier.address && <p>📍 {supplier.address}</p>}
+                {supplier.contactNumber && <p>Contact number: {supplier.contactNumber}</p>}
+                {supplier.address && <p>Address: {supplier.address}</p>}
               </div>
               <div className="card-actions">
                 <button onClick={() => handleEditSupplier(supplier)} className="btn-secondary" type="button">Edit</button>

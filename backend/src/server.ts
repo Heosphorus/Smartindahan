@@ -29,6 +29,23 @@ app.use(cors({
 }))
 
 app.use(express.json({ limit: '1mb' }))
+const MAX_INPUT_LENGTH = 64
+
+function containsOverlongString(value: unknown): boolean {
+  if (typeof value === 'string') return value.length > MAX_INPUT_LENGTH
+  if (Array.isArray(value)) return value.some(containsOverlongString)
+  if (value && typeof value === 'object') return Object.values(value).some(containsOverlongString)
+  return false
+}
+
+app.use((req, res, next) => {
+  if (containsOverlongString(req.body) || containsOverlongString(req.query)) {
+    res.status(400).json({ message: `Each text input must be ${MAX_INPUT_LENGTH} characters or fewer.` })
+    return
+  }
+  next()
+})
+
 app.use((_, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'DENY')
@@ -79,14 +96,14 @@ async function startServer(): Promise<void> {
   validateEnvironment()
   await connectDatabase()
   const server = app.listen(env.port, () => {
-    console.log(`SariSmart backend running on port ${env.port}`)
+    console.log(`smarTindahan backend running on port ${env.port}`)
   })
 
   let shuttingDown = false
   const shutdown = (signal: string): void => {
     if (shuttingDown) return
     shuttingDown = true
-    console.log(`Received ${signal}; closing SariSmart backend`)
+    console.log(`Received ${signal}; closing smarTindahan backend`)
     server.close((error) => {
       if (error) process.exitCode = 1
       void mongoose.disconnect().catch(() => { process.exitCode = 1 })
@@ -98,7 +115,7 @@ async function startServer(): Promise<void> {
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   startServer().catch((error: unknown) => {
-    console.error('Unable to start SariSmart backend:', error instanceof Error ? error.message : 'Unknown startup error')
+    console.error('Unable to start smarTindahan backend:', error instanceof Error ? error.message : 'Unknown startup error')
     process.exitCode = 1
   })
 }

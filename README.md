@@ -1,10 +1,10 @@
-# SariSmart
+# smarTindahan
 
-SariSmart is a web-based management platform designed to help sari-sari store owners manage their daily store operations through a centralized system.
+smarTindahan is a web-based management platform designed to help sari-sari store owners manage their daily store operations through a centralized system.
 
 ## Overview
 
-SariSmart provides tools for managing:
+smarTindahan provides tools for managing:
 
 * Inventory
 * Products
@@ -86,7 +86,7 @@ Users can:
 
 ### Sales and Analytics
 
-SariSmart provides reporting for:
+smarTindahan provides reporting for:
 
 * Sales
 * Revenue
@@ -139,38 +139,38 @@ SariSmart provides reporting for:
 
 ```text
 sarismart/
-├── frontend/
-├── backend/
-├── docs/
-├── tests/
-├── .gitignore
-├── README.md
-├── CONTRIBUTING.md
-├── SECURITY.md
-└── LICENSE
+|-- frontend/
+|-- backend/
+|-- docs/
+|-- tests/
+|-- .gitignore
+|-- README.md
+|-- CONTRIBUTING.md
+|-- SECURITY.md
+`-- LICENSE
 ```
 
 
 ## Database
 
-SariSmart uses MongoDB through Mongoose.
+smarTindahan uses MongoDB through Mongoose.
 
 The backend is responsible for communicating with MongoDB Atlas.
 
 ```text
 Frontend
-   ↓
+   |
 Backend API
-   ↓
+   |
 Mongoose
-   ↓
+   |
 MongoDB Atlas
 ```
 
 
 ## Security
 
-SariSmart uses backend-enforced authentication and authorization.
+smarTindahan uses backend-enforced authentication and authorization.
 
 Important security principles include:
 

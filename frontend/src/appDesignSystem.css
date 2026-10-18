@@ -1,0 +1,348 @@
+:root {
+  --app-accent: #13877f;
+  --app-accent-hover: #0f706a;
+  --app-page: #f5f7fa;
+  --app-surface: #ffffff;
+  --app-text: #172b3a;
+  --app-muted: #64748b;
+  --app-border: #e2e8f0;
+}
+
+body,
+.app-shell,
+.main-panel,
+.business-page,
+.admin-page,
+.auth-page {
+  background-color: var(--app-page);
+  color: var(--app-text);
+  font-family: var(--app-font-family, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+}
+
+.app-shell {
+  background: var(--app-page);
+  color: var(--app-text);
+}
+
+.sidebar {
+  background: var(--app-surface);
+  border-color: var(--app-border);
+}
+
+.brand-mark {
+  background: var(--app-accent);
+}
+
+.brand-name,
+.store-name,
+.page-title {
+  color: var(--app-text);
+}
+
+.store-box,
+.kpi-card,
+.panel,
+.customer-card,
+.report-cards > div,
+.business-summary,
+.business-table,
+.alert-card,
+.admin-stat-card,
+.admin-user-card,
+.settings-section {
+  background: var(--app-surface);
+  border-color: var(--app-border);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 3%);
+}
+
+.store-box {
+  min-width: 0;
+}
+
+.store-box .store-name {
+  display: block;
+  max-width: 100%;
+  color: var(--app-text);
+  font-size: 0.95rem;
+  line-height: 1.35;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.topbar .page-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.nav-item {
+  min-height: 42px;
+  color: #334155;
+  transition: background-color .16s ease, color .16s ease;
+  transform: none;
+}
+
+.nav-item:hover {
+  background: #f1f5f9;
+  color: var(--app-text);
+  transform: none;
+}
+
+.nav-item.active {
+  background: #e5f3f1;
+  color: #0c6d66;
+}
+
+.business-page h2,
+.admin-page h2,
+.pos-page-heading h2 {
+  color: var(--app-text);
+  font-family: var(--app-font-family, Inter, ui-sans-serif, system-ui, sans-serif);
+  font-size: clamp(1.75rem, 3vw, 2rem);
+  line-height: 1.2;
+  letter-spacing: -.025em;
+}
+
+.business-page h3,
+.admin-page h3,
+.panel-header h3 {
+  color: var(--app-text);
+}
+
+.business-page > p,
+.business-page .settings-section-heading p,
+.business-page .price-page-heading p:not(.price-eyebrow),
+.admin-page > p,
+.user-info p,
+.user-date,
+.customer-info p {
+  color: var(--app-muted);
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.auth-primary,
+.user-actions button,
+.delete-actions button,
+.edit-actions button {
+  min-height: 40px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.btn-primary {
+  background: var(--app-accent);
+}
+
+.btn-primary:hover {
+  background: var(--app-accent-hover);
+}
+
+.btn-secondary {
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.btn-danger {
+  background: #dc4545;
+}
+
+.btn-danger:hover,
+.delete-actions .danger-button:hover {
+  background: #b83232;
+}
+
+.business-page :is(input, select, textarea),
+.admin-page .modal-input,
+.auth-form-wrap input {
+  min-height: 42px;
+  border-color: #cbd5e1;
+  border-radius: 8px;
+  color: var(--app-text);
+  font-family: inherit;
+}
+
+.business-page :is(input, select, textarea):focus-visible,
+.admin-page .modal-input:focus-visible,
+.auth-form-wrap input:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--app-accent) 26%, transparent);
+  outline-offset: 1px;
+  border-color: var(--app-accent);
+}
+
+.customer-card,
+.admin-user-card,
+.report-cards > div,
+.kpi-card,
+.panel,
+.settings-section,
+.business-table {
+  border-radius: 12px;
+}
+
+.table-head,
+.price-table-head {
+  background: #f8fafc;
+  color: #475569;
+}
+
+.table-row,
+.price-row {
+  border-color: #edf1f5;
+}
+
+.empty-state {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: var(--app-muted);
+}
+
+.modal-dialog,
+.delete-dialog,
+.edit-dialog,
+.policy-modal,
+.price-modal,
+.price-confirm {
+  border: 1px solid var(--app-border);
+  box-shadow: 0 20px 56px rgb(15 23 42 / 16%);
+}
+
+.dashboard-error,
+.auth-error {
+  border: 1px solid #f2c6c6;
+  background: #fff1f1;
+  color: #b4232f;
+}
+
+.status-pending,
+.panel-chip.danger {
+  background: #fff4e5;
+  color: #a85b08;
+}
+
+html[data-theme='dark'] .app-shell,
+html[data-theme='dark'] .sidebar,
+html[data-theme='dark'] .main-panel,
+html[data-theme='dark'] .business-page,
+html[data-theme='dark'] .admin-page {
+  background: var(--app-page);
+  color: var(--app-text);
+}
+
+html[data-theme='dark'] .store-box,
+html[data-theme='dark'] .kpi-card,
+html[data-theme='dark'] .panel,
+html[data-theme='dark'] .customer-card,
+html[data-theme='dark'] .report-cards > div,
+html[data-theme='dark'] .business-summary,
+html[data-theme='dark'] .business-table,
+html[data-theme='dark'] .alert-card,
+html[data-theme='dark'] .admin-stat-card,
+html[data-theme='dark'] .admin-user-card,
+html[data-theme='dark'] .settings-section {
+  background: var(--app-surface);
+  border-color: var(--app-border);
+  color: var(--app-text);
+}
+
+html[data-theme='dark'] .nav-item.active {
+  background: #243d3b;
+  color: #b2e5de;
+}
+
+html[data-theme='dark'] .nav-item:hover {
+  background: #223136;
+  color: var(--app-text);
+}
+
+html[data-theme='dark'] .btn-secondary {
+  background: #202c31;
+  border-color: var(--app-border);
+  color: var(--app-text);
+}
+
+html[data-theme='dark'] .empty-state,
+html[data-theme='dark'] .table-head,
+html[data-theme='dark'] .price-table-head {
+  background: #192328;
+  border-color: var(--app-border);
+  color: var(--app-muted);
+}
+
+html[data-theme='dark'] .business-page :is(input, select, textarea),
+html[data-theme='dark'] .admin-page .modal-input,
+html[data-theme='dark'] .auth-form-wrap input {
+  background: #121a1e;
+  border-color: var(--app-border);
+  color: var(--app-text);
+}
+
+html[data-theme='dark'] .business-page :is(input, select, textarea)::placeholder,
+html[data-theme='dark'] .auth-form-wrap input::placeholder {
+  color: #aab9bd;
+  opacity: 1;
+}
+
+@media (max-width: 820px) {
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 10px 12px;
+  }
+
+  .brand-row {
+    margin-bottom: 10px;
+  }
+
+  .store-box {
+    margin-bottom: 10px;
+  }
+
+  .nav-list {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 2px 0 6px;
+    scrollbar-width: thin;
+  }
+
+  .nav-item {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 40px;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 560px) {
+  .main-panel {
+    padding: 14px 14px 22px;
+  }
+
+  .business-page,
+  .admin-page {
+    padding: 10px 0 24px;
+  }
+
+  .business-page .customer-card,
+  .admin-page .admin-user-card {
+    gap: 12px;
+    padding: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
