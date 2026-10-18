@@ -3,14 +3,6 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: "/Heosphorus/Smartindahan",
+  base: process.env.GITHUB_PAGES === 'true' ? '/Heosphorus/Smartindahan/' : '/',
   plugins: [react()],
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5000',
-        changeOrigin: true,
-      },
-    },
-  },
 })

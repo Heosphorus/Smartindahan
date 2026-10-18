@@ -26,10 +26,12 @@ export async function connectDatabase(): Promise<void> {
     console.log('MongoDB connected successfully')
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    const hint = /bad auth|authentication failed|not authorized|not whitelisted|econnrefused|timed out|timeout/i.test(errorMessage)
-      ? 'Verify the MongoDB Atlas username/password in backend/.env and ensure the current IP is whitelisted in Atlas.'
-      : 'Check the MongoDB URI, cluster status, and network access configuration.'
+    const failureType = /bad auth|authentication failed|not authorized/i.test(errorMessage)
+      ? 'database authentication failed'
+      : /not whitelisted|econnrefused|timed out|timeout/i.test(errorMessage)
+        ? 'database network access failed'
+        : 'database connection failed'
 
-    throw new Error(`${errorMessage} | ${hint}`)
+    throw new Error(failureType)
   }
 }
