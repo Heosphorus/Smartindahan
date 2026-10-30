@@ -10,7 +10,7 @@ smarTindahan is a web app that helps sari-sari store owners run the shop: record
 | Dashboard | Today's sales, today's estimated profit, inventory value, low-stock list, top sellers (all time), recent transactions, 7-day and month-to-date sales chart. Days are bucketed in Philippine time (UTC+8). |
 | POS | Find a product by name, barcode or camera scan, build a cart, adjust quantities (never above stock), check out. Checkout is atomic and protected against double-submits. |
 | Price list | Add, edit, archive products; bulk add; set minimum stock; set exact stock by recount. Sales history keeps the price and cost at the time of sale. |
-| Business | Sales history, customers (name/contact/credit limit), suppliers, expenses, low-stock alerts, sales report (revenue, gross profit, margin, daily and payment-method breakdown), settings and theme. |
+| Business | Sales history, customers (name/contact/credit limit), suppliers, expenses, low-stock alerts, restock suggestions and slow-mover list (calculated from the store's own last 30 days of sales, no outside AI service), sales report (revenue, gross profit, margin, daily and payment-method breakdown), settings and theme. |
 | Barcode | Camera scanning via ZXing, optional product-name lookup from Open Food Facts. |
 | Legal and privacy | Public Terms of Service and Privacy Policy pages (versioned, **draft**), an unchecked agreement box at registration enforced by the API, consent records, re-acceptance when Terms change, data download, privacy requests and account deletion with a waiting period. See [docs/privacy-and-consent.md](docs/privacy-and-consent.md). |
 

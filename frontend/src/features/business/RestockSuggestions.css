@@ -1,0 +1,24 @@
+.restock { margin: 8px 0 28px; padding: 18px; border: 1px solid var(--app-border); border-radius: 12px; background: var(--app-surface); color: var(--app-text); }
+.restock h3, .restock h4 { margin: 0 0 4px; }
+.restock p { line-height: 1.55; }
+.restock-heading { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; align-items: flex-end; }
+.restock-cover { display: grid; gap: 4px; font-weight: 600; font-size: .9rem; }
+.restock-cover select { padding: 8px 10px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-page); color: var(--app-text); font: inherit; }
+.restock-summary { font-weight: 600; }
+.restock-table-wrap { overflow-x: auto; }
+.restock-table { width: 100%; border-collapse: collapse; font-size: .92rem; min-width: 640px; }
+.restock-table th, .restock-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--app-border); vertical-align: top; }
+.restock-table tbody th { font-weight: 600; max-width: 260px; }
+.restock-table small { display: block; font-weight: 400; opacity: .85; margin-top: 2px; }
+.restock-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.restock-out { background: #fde2df; color: #7a1b12; }
+.restock-urgent { background: #ffe9c7; color: #6b3a00; }
+.restock-soon { background: #fff4d6; color: #5c4300; }
+.restock-low { background: color-mix(in srgb, var(--app-accent) 18%, var(--app-surface)); color: var(--app-text); }
+.restock .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+html[data-theme='dark'] .restock-out { background: #4a1d19; color: #ffd9d4; }
+html[data-theme='dark'] .restock-urgent { background: #4a3210; color: #ffe0b0; }
+html[data-theme='dark'] .restock-soon { background: #3a2f10; color: #ffe9a8; }
+.restock-slow { margin: 6px 0; padding-left: 1.2rem; }
+.restock-method { font-size: .85rem; opacity: .85; }
+@media (max-width: 640px) { .restock { padding: 14px; } }

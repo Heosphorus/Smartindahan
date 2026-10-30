@@ -9,6 +9,7 @@ import { SaleModel } from '../models/Sale.js'
 import { SupplierModel } from '../models/Supplier.js'
 import { UserModel } from '../models/User.js'
 import { recordAuditLog } from '../services/auditService.js'
+import { DEFAULT_COVER_DAYS, restockInsightsForStore } from '../services/restockService.js'
 import { parsePagination } from '../utils/pagination.js'
 import { parseObjectId } from '../utils/objectId.js'
 import { pickRequestFields } from '../utils/requestFields.js'
@@ -181,6 +182,18 @@ export async function listAlerts(req: AuthenticatedRequest, res: Response): Prom
   const id = storeId(req); if (!id) { unauthorized(res); return }
   const products = await ProductModel.find({ storeId: id, status: 'active', $expr: { $lte: ['$currentStock', '$minStock'] } }).sort({ currentStock: 1 }).limit(100).lean()
   res.json({ alerts: products.map((product) => ({ id: product._id, type: 'LOW_STOCK', severity: product.currentStock === 0 ? 'critical' : 'warning', title: `${product.name} is low on stock`, message: `${product.currentStock} ${product.unit} remaining. Minimum is ${product.minStock}.`, createdAt: product.updatedAt })) })
+}
+
+/** Rule-based restock suggestions and slow movers from the store's own recent sales (no external service). */
+export async function restockInsights(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const id = storeId(req); if (!id) { unauthorized(res); return }
+  const raw = req.query.coverDays
+  const coverDays = raw === undefined ? DEFAULT_COVER_DAYS : Number(raw)
+  if (typeof raw === 'string' && (!Number.isInteger(coverDays) || coverDays < 1 || coverDays > 60)) {
+    res.status(400).json({ message: 'Choose between 1 and 60 days of cover.' })
+    return
+  }
+  res.json(await restockInsightsForStore(id, coverDays))
 }
 
 export async function getSettings(req: AuthenticatedRequest, res: Response): Promise<void> {

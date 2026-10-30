@@ -2,7 +2,7 @@ import { Router } from 'express'
 
 import { authenticateToken, requireRole, requireStoreMembership } from '../middleware/authMiddleware.js'
 import { requirePolicyAcceptance } from '../middleware/policyMiddleware.js'
-import { createCustomer, createExpense, createSupplier, deleteCustomer, deleteExpense, deleteSupplier, getSettings, listAlerts, listCustomers, listExpenses, listSales, listSuppliers, salesReport, updateCustomer, updateExpense, updateSettings, updateSupplier } from '../controllers/businessController.js'
+import { createCustomer, createExpense, createSupplier, deleteCustomer, deleteExpense, deleteSupplier, getSettings, listAlerts, listCustomers, listExpenses, listSales, listSuppliers, restockInsights, salesReport, updateCustomer, updateExpense, updateSettings, updateSupplier } from '../controllers/businessController.js'
 
 const router = Router()
 router.use(authenticateToken, requireRole('STORE_OWNER'), requireStoreMembership, requirePolicyAcceptance)
@@ -21,6 +21,7 @@ router.post('/expenses', createExpense)
 router.patch('/expenses/:id', updateExpense)
 router.delete('/expenses/:id', deleteExpense)
 router.get('/alerts', listAlerts)
+router.get('/insights/restock', restockInsights)
 router.get('/settings', getSettings)
 router.patch('/settings', updateSettings)
 export default router

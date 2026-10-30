@@ -5,6 +5,7 @@ import { authApi } from '../../services/authApi'
 import { accentOptions, fontOptions, fontSizeOptions, getThemePreferences, saveThemePreferences, type ThemeMode } from '../../services/themePreferences'
 import './BusinessPages.css'
 import { PrivacySettings } from '../legal/PrivacySettings'
+import { RestockSuggestions } from './RestockSuggestions'
 import './SettingsPage.css'
 import './ThemeSettings.css'
 
@@ -64,6 +65,8 @@ export function AlertsPage() {
       <p>View and manage system alerts and notifications.</p>
 
       {error && <div className="dashboard-error">{error}</div>}
+
+      <RestockSuggestions />
 
       <div className="alert-list">
         {alerts.length === 0 ? (
