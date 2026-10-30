@@ -424,12 +424,16 @@ export function ReportsPage() {
         <>
           <div className="report-cards">
             <div>
-              <span>Total Sales</span>
+              <span>Total Sales (revenue)</span>
               <strong>{formatPeso(report.summary.sales)}</strong>
             </div>
             <div>
-              <span>Total Profit</span>
+              <span>Gross Profit (before expenses)</span>
               <strong>{formatPeso(report.summary.profit)}</strong>
+            </div>
+            <div>
+              <span>Profit Margin</span>
+              <strong>{report.summary.sales > 0 ? `${((report.summary.profit / report.summary.sales) * 100).toFixed(1)}%` : '—'}</strong>
             </div>
             <div>
               <span>Transactions</span>

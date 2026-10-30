@@ -22,7 +22,7 @@ export function AdminPanel() {
       console.error('Logout error:', err)
     } finally {
       localStorage.removeItem('sarismart_token')
-      window.location.href = '/login'
+      window.location.assign(import.meta.env.BASE_URL)
     }
   }
 

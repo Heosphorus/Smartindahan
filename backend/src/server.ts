@@ -60,7 +60,9 @@ app.use((_, res, next) => {
   next()
 })
 
-function healthReport(_: express.Request, res: express.Response): void {
+// Reports real database state; on serverless hosts it also performs the first (lazy) connection attempt.
+async function healthReport(_: express.Request, res: express.Response): Promise<void> {
+  await ensureDatabaseConnection().catch(() => undefined)
   const database = databaseStatus()
   res.status(database === 'connected' ? 200 : 503).json({ status: database === 'connected' ? 'ok' : 'degraded', database })
 }

@@ -23,6 +23,8 @@ export function POSFlow() {
   const [newProductForm, setNewProductForm] = useState<NewProductForm>(emptyNewProduct(''))
   const [isCreatingProduct, setIsCreatingProduct] = useState(false)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
+  const [search, setSearch] = useState('')
+  const cartRef = useRef<CartItem[]>([])
   // One key per cart attempt: a retry or double-click re-sends the same key, so the server records the sale once.
   const checkoutKeyRef = useRef<string | null>(null)
   const closeUnknownProduct = useCallback(() => setUnknownBarcode(''), [])
@@ -30,15 +32,23 @@ export function POSFlow() {
   const lastScanRef = useRef({ value: '', time: 0 })
 
   // A changed cart is a different sale, so it must not reuse the previous attempt's key.
-  useEffect(() => { checkoutKeyRef.current = null }, [cart])
+  useEffect(() => {
+    checkoutKeyRef.current = null
+    cartRef.current = cart
+  }, [cart])
 
   useEffect(() => {
     storeApi.allProducts().then((allProducts) => setProducts(allProducts)).catch((error: unknown) => setStatus(error instanceof Error ? error.message : 'Unable to load products'))
   }, [])
 
-  const addToCart = useCallback((product: ProductRecord, quantity = 1) => {
+  const addToCart = useCallback((product: ProductRecord, quantity = 1): boolean => {
     const productId = product._id ?? product.id
-    if (!productId) return
+    if (!productId) return false
+    const inCart = cartRef.current.find((item) => item.productId === productId)?.quantity ?? 0
+    if (inCart + quantity > product.currentStock) {
+      setStatus(product.currentStock > 0 ? `Only ${product.currentStock} ${product.name} left in stock` : `${product.name} is out of stock`)
+      return false
+    }
     setCart((current) => {
       const existing = current.find((item) => item.productId === productId)
 
@@ -61,7 +71,29 @@ export function POSFlow() {
         },
       ]
     })
+    return true
   }, [])
+
+  const changeQuantity = (productId: string, delta: number) => {
+    const stock = products.find((product) => (product._id ?? product.id) === productId)?.currentStock
+    setCart((current) => current.flatMap((item) => {
+      if (item.productId !== productId) return [item]
+      const next = item.quantity + delta
+      if (next < 1) return []
+      return [{ ...item, quantity: stock === undefined ? next : Math.min(next, stock) }]
+    }))
+  }
+
+  const searchResults = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    if (!term) return []
+    return products.filter((product) => [product.name, product.barcode, product.sku, product.brand].some((value) => value?.toLowerCase().includes(term))).slice(0, 8)
+  }, [products, search])
+
+  const addFromSearch = (product: ProductRecord) => {
+    if (addToCart(product, 1)) setStatus(`${product.name} added to cart`)
+    setSearch('')
+  }
 
   const handleScan = useCallback(async (rawValue: string) => {
     const normalized = rawValue.trim()
@@ -85,8 +117,7 @@ export function POSFlow() {
         return
       }
       setUnknownBarcode('')
-      addToCart(response.product, 1)
-      setStatus(`${response.product.name} added to cart`)
+      if (addToCart(response.product, 1)) setStatus(`${response.product.name} added to cart`)
       if (navigator.vibrate) navigator.vibrate(80)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Unable to look up barcode')
@@ -178,6 +209,24 @@ export function POSFlow() {
         <button className="pos-primary" type="button" onClick={() => setCameraOpen(true)}>Scan with camera</button>
       </div>
 
+      <div className="pos-search">
+        <label htmlFor="pos-search">Search products by name</label>
+        <input id="pos-search" type="search" autoComplete="off" placeholder="Type a product name, brand or barcode" value={search} onChange={(event) => setSearch(event.target.value)} />
+        {search.trim() && (
+          <ul className="pos-search-results" aria-label="Matching products">
+            {searchResults.map((product) => (
+              <li key={product._id ?? product.id}>
+                <button type="button" onClick={() => addFromSearch(product)} disabled={product.currentStock < 1}>
+                  <span>{product.name}</span>
+                  <span>{formatCurrency(product.sellingPrice)} · {product.currentStock < 1 ? 'Out of stock' : `${product.currentStock} in stock`}</span>
+                </button>
+              </li>
+            ))}
+            {!searchResults.length && <li className="pos-search-empty">No matching products.</li>}
+          </ul>
+        )}
+      </div>
+
       <div className="pos-manual-scan"><label htmlFor="pos-barcode">Or enter barcode manually</label><div><input id="pos-barcode" aria-label="Barcode" placeholder="Enter barcode manually" value={barcodeInput} onChange={(event) => setBarcodeInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void handleScan(barcodeInput) } }} maxLength={64} /><button className="pos-secondary" type="button" onClick={() => void handleScan(barcodeInput)} disabled={!barcodeInput.trim()}>Look up</button></div></div>
 
       {unknownBarcode && <div className="pos-add-product-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isCreatingProduct) closeUnknownProduct() }}><section className="pos-enrichment pos-add-product-dialog" role="dialog" aria-modal="true" aria-labelledby="pos-enrichment-title">
@@ -214,6 +263,11 @@ export function POSFlow() {
             <div>
               <p style={styles.itemName}>{item.productName}</p>
               <p style={styles.metaText}>x{item.quantity}</p>
+            </div>
+            <div className="pos-qty-controls">
+              <button type="button" aria-label={`Remove one ${item.productName}`} onClick={() => changeQuantity(item.productId, -1)}>−</button>
+              <button type="button" aria-label={`Add one more ${item.productName}`} onClick={() => changeQuantity(item.productId, 1)}>+</button>
+              <button type="button" className="pos-remove" aria-label={`Remove ${item.productName} from cart`} onClick={() => changeQuantity(item.productId, -item.quantity)}>Remove</button>
             </div>
             <div style={styles.amountBox}>{formatCurrency(item.quantity * item.unitPrice)}</div>
           </div>

@@ -11,6 +11,31 @@ permissions:
   contents: read
 
 jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npm run typecheck
+        working-directory: backend
+      # Integration tests start an in-memory MongoDB replica set (binary is downloaded on first use).
+      - uses: actions/cache@v4
+        with:
+          path: backend/node_modules/.cache/mongodb-memory-server
+          key: mongodb-memory-server-${{ hashFiles('backend/package-lock.json') }}
+      - run: npm test
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm audit --audit-level=high
+        working-directory: backend
+
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -24,26 +49,27 @@ jobs:
         working-directory: frontend
       - run: npm run lint
         working-directory: frontend
+      - run: npm test
+        working-directory: frontend
       - run: npm run build
+        working-directory: frontend
+      - run: npm audit --audit-level=high
         working-directory: frontend
       - uses: actions/upload-artifact@v4
         with:
-          name: sarismart-frontend-dist
+          name: smartindahan-frontend-dist
           path: frontend/dist/
           if-no-files-found: error
 
-  backend:
+  vercel-build:
+    # Mirrors the Vercel install/build commands so a deployment failure shows up here first.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-      - run: npm ci
-        working-directory: backend
-      - run: npm test
-        working-directory: backend
+      - run: npm ci --prefix backend && npm ci --prefix frontend
       - run: npm run build
-        working-directory: backend
+      - name: Check function entry resolves
+        run: node -e "import('./api/index.js').then((m) => { if (typeof m.default !== 'function') throw new Error('api/index.js must export the Express app'); console.log('api/index.js OK') })"

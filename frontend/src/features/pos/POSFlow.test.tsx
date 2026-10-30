@@ -45,6 +45,38 @@ describe('POS checkout', () => {
     await waitFor(() => expect(screen.getByText(/Checkout complete: TXN-1/)).toBeTruthy())
   })
 
+  it('finds products without a barcode by name and adds them to the cart', async () => {
+    vi.spyOn(storeApi, 'allProducts').mockResolvedValue([sardines, { ...sardines, _id: 'p2', name: 'Egg (per piece)', sellingPrice: 9, currentStock: 0 }])
+    render(<POSFlow />)
+    await waitFor(() => expect(storeApi.allProducts).toHaveBeenCalled())
+
+    fireEvent.change(screen.getByLabelText('Search products by name'), { target: { value: 'sard' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Sardines 155g/ }))
+    expect(await screen.findByText('x1')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Search products by name'), { target: { value: 'egg' } })
+    expect((await screen.findByRole('button', { name: /Egg \(per piece\)/ })).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('lets the cashier change quantities but never beyond stock', async () => {
+    vi.spyOn(storeApi, 'allProducts').mockResolvedValue([{ ...sardines, currentStock: 2 }])
+    render(<POSFlow />)
+    await waitFor(() => expect(storeApi.allProducts).toHaveBeenCalled())
+    fireEvent.change(screen.getByLabelText('Search products by name'), { target: { value: 'sard' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Sardines 155g/ }))
+
+    const more = await screen.findByRole('button', { name: 'Add one more Sardines 155g' })
+    fireEvent.click(more)
+    fireEvent.click(more)
+    fireEvent.click(more)
+    expect(screen.getByText('x2')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove one Sardines 155g' }))
+    expect(screen.getByText('x1')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Sardines 155g from cart' }))
+    expect(screen.queryByText('x1')).toBeNull()
+  })
+
   it('keeps the cart and explains the problem when checkout fails', async () => {
     vi.spyOn(storeApi, 'checkout').mockRejectedValue(new Error('Sardines 155g has insufficient stock.'))
     await scanSardines()

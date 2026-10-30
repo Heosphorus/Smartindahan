@@ -780,3 +780,36 @@ html[data-theme='dark'] .bulk-modal > label {
     width: 100%;
   }
 }
+
+/* Phones: keep what a store owner checks most (name, selling price, stock, actions) visible without sideways scrolling. */
+@media (max-width: 640px) {
+  .price-data-table {
+    min-width: 0;
+  }
+
+  .price-data-table th,
+  .price-data-table td {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .price-data-table td:first-child {
+    min-width: 130px;
+  }
+
+  .price-data-table .price-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .price-data-table th:nth-child(2),
+  .price-data-table td:nth-child(2),
+  .price-data-table th:nth-child(3),
+  .price-data-table td:nth-child(3),
+  .price-data-table th:nth-child(5),
+  .price-data-table td:nth-child(5),
+  .price-data-table th:nth-child(7),
+  .price-data-table td:nth-child(7) {
+    display: none;
+  }
+}

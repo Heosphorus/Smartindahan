@@ -261,3 +261,18 @@
 @media (max-width: 420px) {
   .pos-new-product-form { grid-template-columns: 1fr; }
 }
+
+.pos-search { margin-bottom: 14px; }
+.pos-search label { display: block; margin-bottom: 6px; font-size: .85rem; font-weight: 700; color: var(--app-muted); }
+.pos-search input { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--app-border); border-radius: 10px; background: var(--app-surface); color: var(--app-text); font: inherit; }
+.pos-search-results { margin: 6px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border); border-radius: 10px; overflow: hidden; background: var(--app-surface); }
+.pos-search-results li + li { border-top: 1px solid var(--app-border); }
+.pos-search-results button { display: flex; justify-content: space-between; gap: 12px; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; background: transparent; color: var(--app-text); font: inherit; text-align: left; cursor: pointer; }
+.pos-search-results button span:last-child { flex: 0 0 auto; color: var(--app-muted); font-size: .85rem; }
+.pos-search-results button:hover:not(:disabled), .pos-search-results button:focus-visible { background: rgba(19, 135, 127, .1); }
+.pos-search-results button:disabled { cursor: not-allowed; opacity: .55; }
+.pos-search-empty { padding: 12px; color: var(--app-muted); }
+.pos-qty-controls { display: flex; gap: 6px; align-items: center; }
+.pos-qty-controls button { min-width: 40px; min-height: 40px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); color: var(--app-text); font: inherit; font-weight: 700; cursor: pointer; }
+.pos-qty-controls .pos-remove { padding: 0 10px; color: #b3261e; font-size: .8rem; }
+@media (max-width: 560px) { .pos-qty-controls .pos-remove { display: none; } }

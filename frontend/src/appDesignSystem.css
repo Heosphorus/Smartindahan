@@ -298,11 +298,13 @@ html[data-theme='dark'] .auth-form-wrap input::placeholder {
     margin-bottom: 10px;
   }
 
-  .store-box {
-    margin-bottom: 10px;
+  /* The store name is already the page title, so keep the sticky header short on phones. */
+  .store-box,
+  .brand-sub {
+    display: none;
   }
 
-  .nav-list {
+  .sidebar .nav-list {
     display: flex;
     flex-direction: row;
     gap: 6px;
@@ -311,7 +313,7 @@ html[data-theme='dark'] .auth-form-wrap input::placeholder {
     scrollbar-width: thin;
   }
 
-  .nav-item {
+  .sidebar .nav-item {
     flex: 0 0 auto;
     width: auto;
     min-height: 40px;

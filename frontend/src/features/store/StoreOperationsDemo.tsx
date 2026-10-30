@@ -8,6 +8,8 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 import './DashboardControls.css'
 
 const formatPeso = (value: number) => `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+// Until the dashboard has loaded, show a dash instead of a zero that could be mistaken for real figures.
+const NOT_LOADED = '—'
 
 export function StoreOperationsDemo() {
   const [activeNav, setActiveNav] = useState('Dashboard')
@@ -18,13 +20,17 @@ export function StoreOperationsDemo() {
   useEscapeKey(showLogoutModal, () => setShowLogoutModal(false))
   const [salesPeriod, setSalesPeriod] = useState<'weekly' | 'monthly'>('weekly')
 
+  const [reloadCount, setReloadCount] = useState(0)
+
+  // Reload whenever the Dashboard is shown, so sales recorded in the POS appear without a manual refresh.
   useEffect(() => {
+    if (activeNav !== 'Dashboard') return undefined
     let currentRequest = true
     storeApi.dashboard(salesPeriod)
-      .then((data) => { if (currentRequest) setDashboard(data) })
+      .then((data) => { if (currentRequest) { setDashboard(data); setDashboardError('') } })
       .catch((error: unknown) => { if (currentRequest) setDashboardError(error instanceof Error ? error.message : 'Unable to load dashboard data.') })
     return () => { currentRequest = false }
-  }, [salesPeriod])
+  }, [salesPeriod, activeNav, reloadCount])
 
   useEffect(() => {
     const syncStoreName = (event: Event) => {
@@ -64,7 +70,7 @@ export function StoreOperationsDemo() {
       console.error('Logout error:', err)
     } finally {
       localStorage.removeItem('sarismart_token')
-      window.location.href = '/login'
+      window.location.assign(import.meta.env.BASE_URL)
     }
   }
 
@@ -74,8 +80,8 @@ export function StoreOperationsDemo() {
         <div className="brand-row">
           <div className="brand-mark">◫</div>
           <div>
-            <div className="brand-name">SariManager</div>
-            <div className="brand-sub">Smarter sari-sari</div>
+            <div className="brand-name">smarTindahan</div>
+            <div className="brand-sub">Smarter tools for your tindahan</div>
           </div>
         </div>
 
@@ -121,17 +127,17 @@ export function StoreOperationsDemo() {
               <span className="kpi-label">Today's Sales</span>
               <span className="kpi-icon positive">↗</span>
             </div>
-            <div className="kpi-value">{formatPeso(dashboard?.kpis.todaysSales ?? 0)}</div>
-            <div className="kpi-sub">{dashboard?.kpis.transactions ?? 0} transactions</div>
+            <div className="kpi-value">{dashboard ? formatPeso(dashboard.kpis.todaysSales) : NOT_LOADED}</div>
+            <div className="kpi-sub">{dashboard ? `${dashboard.kpis.transactions} ${dashboard.kpis.transactions === 1 ? 'transaction' : 'transactions'} today` : 'Loading…'}</div>
           </div>
 
           <div className="kpi-card">
             <div className="kpi-header">
-              <span className="kpi-label">Est. Profit</span>
+              <span className="kpi-label">Today's Profit (est.)</span>
               <span className="kpi-icon neutral">◫</span>
             </div>
-            <div className="kpi-value">{formatPeso(dashboard?.kpis.estimatedProfit ?? 0)}</div>
-            <div className="kpi-sub"> </div>
+            <div className="kpi-value">{dashboard ? formatPeso(dashboard.kpis.estimatedProfit) : NOT_LOADED}</div>
+            <div className="kpi-sub">Sales minus cost of goods</div>
           </div>
 
           <div className="kpi-card">
@@ -139,7 +145,7 @@ export function StoreOperationsDemo() {
               <span className="kpi-label">Outstanding Utang</span>
               <span className="kpi-icon warning">₱</span>
             </div>
-            <div className="kpi-value">{formatPeso(dashboard?.kpis.outstandingUtang ?? 0)}</div>
+            <div className="kpi-value">{dashboard ? formatPeso(dashboard.kpis.outstandingUtang) : NOT_LOADED}</div>
             <div className="kpi-sub"> </div>
           </div>
 
@@ -148,8 +154,8 @@ export function StoreOperationsDemo() {
               <span className="kpi-label">Inventory Value</span>
               <span className="kpi-icon pastel">◧</span>
             </div>
-            <div className="kpi-value">{formatPeso(dashboard?.kpis.inventoryValue ?? 0)}</div>
-            <div className="kpi-sub"> </div>
+            <div className="kpi-value">{dashboard ? formatPeso(dashboard.kpis.inventoryValue) : NOT_LOADED}</div>
+            <div className="kpi-sub">Stock on hand, at cost price</div>
           </div>
         </div>
 
@@ -168,7 +174,8 @@ export function StoreOperationsDemo() {
                 </select>
               </label>
             </div>
-            <svg viewBox="0 0 760 220" className="chart-svg" aria-label="Sales chart">
+            <p className="chart-summary">{dashboard ? `Best day: ${formatPeso(chartMax === 1 && !chartData.some((point) => point.sales > 0) ? 0 : chartMax)} · Total: ${formatPeso(chartData.reduce((sum, point) => sum + point.sales, 0))}` : 'Loading…'}</p>
+            <svg viewBox="0 0 760 220" className="chart-svg" role="img" aria-label={`Sales chart, ${salesPeriod}: ${chartData.map((point) => `${point.date} ${formatPeso(point.sales)}`).join(', ')}`}>
               <path d={chartAreaPath} fill="rgba(59, 130, 246, 0.18)" />
               <path d={chartPath} fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" />
               <g className="chart-grid-lines">
@@ -193,7 +200,7 @@ export function StoreOperationsDemo() {
 
           <section className="panel sales-panel">
             <div className="panel-header">
-              <h3>Top Selling</h3>
+              <h3>Top Selling (all time)</h3>
             </div>
             <div className="top-list">
               {(dashboard?.topSelling ?? []).map((item) => (
@@ -203,7 +210,8 @@ export function StoreOperationsDemo() {
                   <div className="rank-count">{item.sold} sold</div>
                 </div>
               ))}
-              {!dashboard?.topSelling.length && <div className="empty-state">No completed sales yet.</div>}
+              {dashboard && !dashboard.topSelling.length && <div className="empty-state">No completed sales yet.</div>}
+              {!dashboard && <div className="empty-state">Loading…</div>}
             </div>
           </section>
         </div>
@@ -221,7 +229,8 @@ export function StoreOperationsDemo() {
                   <span className="stock-left">{item.currentStock} left</span>
                 </div>
               ))}
-              {!dashboard?.lowStock.length && <div className="empty-state">No low-stock products.</div>}
+              {dashboard && !dashboard.lowStock.length && <div className="empty-state">No low-stock products.</div>}
+              {!dashboard && <div className="empty-state">Loading…</div>}
             </div>
           </section>
 
@@ -233,18 +242,19 @@ export function StoreOperationsDemo() {
               {(dashboard?.recentTransactions ?? []).map((transaction) => (
                 <div key={transaction.id} className="transaction-row">
                   <div>
-                    <div className="tx-id">#{transaction.id}</div>
+                    <div className="tx-id" title={transaction.id}>#{transaction.id.replace(/^TXN-/, '').slice(0, 8).toUpperCase()}</div>
                     <div className="tx-meta">{new Date(transaction.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })} · {transaction.paymentMethod}</div>
                   </div>
                   <div className="tx-amount">{formatPeso(transaction.amount)}</div>
                 </div>
               ))}
-              {!dashboard?.recentTransactions.length && <div className="empty-state">No recent transactions.</div>}
+              {dashboard && !dashboard.recentTransactions.length && <div className="empty-state">No recent transactions.</div>}
+              {!dashboard && <div className="empty-state">Loading…</div>}
             </div>
           </section>
         </div>
 
-        {dashboardError && <div className="dashboard-error">{dashboardError}</div>}
+        {dashboardError && <div className="dashboard-error" role="alert">{dashboardError} <button type="button" className="btn-secondary" onClick={() => { setDashboardError(''); setReloadCount((count) => count + 1) }}>Try again</button></div>}
         </div>
       </main>
 
