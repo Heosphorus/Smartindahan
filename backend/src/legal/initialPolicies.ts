@@ -109,11 +109,11 @@ export const initialPolicies: PolicyDraft[] = [
         'Agreement records: which version of the Terms of Service you accepted and which version of this notice you acknowledged, and when.',
         'Audit and security logs: events such as sign-in success or failure, password changes, email verification, data exports and deletion requests, important stock and record changes, with the time, your account, and the IP address and browser (user-agent) of the request.',
         'Privacy and support requests you submit through the app, including the message you write.',
-        'Technical data needed to operate the service: our hosting provider processes standard request data (such as IP address and time) in its infrastructure logs.',
+        'Technical data needed to operate the service: our hosting provider processes standard request data (such as IP address and time) in its infrastructure logs, and Vercel Web Analytics records page views (page address, referrer, browser, device type, approximate country).',
       ] },
       { id: 'browser', heading: '3. Cookies, local storage and your browser', paragraphs: [
         'The app does not set cookies. It stores a session token and your display preferences (such as theme) in your browser\'s local storage so you stay signed in; signing out removes the token from your device and cancels it on the server.',
-        'The app does not include advertising or analytics trackers.',
+        'The app does not include advertising trackers. When it is served from Vercel it uses Vercel Web Analytics to count page visits. This records which page was viewed and basic technical details such as referrer, browser, device type and approximate country, without setting cookies and without identifying you personally across sites. [Confirm against the current Vercel documentation and your analytics settings.] It only runs on the Vercel-hosted site, and it does not read what you type or the contents of your store records.',
         'Scanning a barcode uses your camera inside your browser. Camera images are not uploaded to us. If you use the optional product-name lookup, the barcode number is sent from your browser to Open Food Facts (a third-party public database), which can see your IP address.',
       ] },
       { id: 'use', heading: '4. Why we use it', paragraphs: ['We use personal information to:'], bullets: [
@@ -131,7 +131,7 @@ export const initialPolicies: PolicyDraft[] = [
         'We do not sell personal information and do not share it for advertising. We use service providers who process data for us, only to run the service:',
       ], bullets: [
         'Database hosting: MongoDB Atlas (MongoDB, Inc.). Region: [database region — owner to confirm].',
-        'Application hosting: Vercel Inc. Region: [hosting region — owner to confirm]. The public web pages may alternatively be served by GitHub Pages (GitHub, Inc.) if the owner enables that.',
+        'Application hosting and visit statistics: Vercel Inc. (including Vercel Web Analytics). Region: [hosting region — owner to confirm]. The public web pages may alternatively be served by GitHub Pages (GitHub, Inc.) if the owner enables that.',
         'Email delivery for verification and reset codes: [Resend or the SMTP provider the owner configures — owner to confirm].',
         'Barcode lookup (optional, started by you): Open Food Facts.',
       ] },

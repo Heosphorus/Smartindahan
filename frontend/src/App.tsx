@@ -1,5 +1,6 @@
 import './App.css'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
+import { Analytics } from '@vercel/analytics/react'
 
 import { AuthPage } from './features/auth/AuthPage'
 import { LegalPage } from './features/legal/LegalPage'
@@ -40,17 +41,14 @@ function App() {
   }, [])
 
   // The policies are public: readable without an account, and without leaving the registration form's tab.
-  if (legalRoute) return <LegalPage type={legalRoute} />
+  let content: ReactNode
+  if (legalRoute) content = <LegalPage type={legalRoute} />
+  else if (!token) content = <AuthPage onAuthenticated={setToken} />
+  else if (isAdmin) content = <AdminPanel />
+  else content = <PolicyGate onSignOut={() => void signOut(token)}><StoreOperationsDemo /></PolicyGate>
 
-  if (!token) {
-    return <AuthPage onAuthenticated={setToken} />
-  }
-
-  if (isAdmin) {
-    return <AdminPanel />
-  }
-
-  return <PolicyGate onSignOut={() => void signOut(token)}><StoreOperationsDemo /></PolicyGate>
+  // Vercel Web Analytics: page views only, no cookies. It only reports when served from Vercel (see the Privacy Policy).
+  return <>{content}<Analytics /></>
 }
 
 export default App

@@ -96,6 +96,10 @@ No password, code, token, IP address or user-agent is stored in it (the audit lo
 5. Backups are controlled by the database provider; deleted data can remain in backups until they expire.
 6. Admin accounts cannot be closed through this flow.
 
+## Visit analytics
+
+The front end renders `<Analytics />` from `@vercel/analytics/react` (in `App.tsx`). It sends page views to Vercel Web Analytics only when served from Vercel, and the Privacy Policy discloses it. You must enable Web Analytics in the Vercel project (Analytics tab) for data to appear. Because policies are immutable versions, a database that already holds `1.0-draft` keeps the old text; publish a new version if that text was ever shown to real users. Counsel should confirm whether this needs notice or a lawful-basis entry beyond what the policy says.
+
 ## Authentication and sessions (what was evaluated and kept)
 
 - **Passwords:** bcrypt, cost 12 (salted). Argon2id would also be acceptable, but needs a native module that complicates the Vercel build; bcrypt at this cost is a justified, widely reviewed choice. Revisit if you move off serverless.

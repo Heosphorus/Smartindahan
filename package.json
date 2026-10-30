@@ -14,5 +14,8 @@
     "typecheck": "npm run typecheck --prefix backend",
     "lint": "npm run lint --prefix frontend",
     "test": "npm test --prefix backend && npm test --prefix frontend"
+  },
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
   }
 }
