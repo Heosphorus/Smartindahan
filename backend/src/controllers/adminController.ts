@@ -1,4 +1,5 @@
 import type { Response } from 'express'
+import { randomUUID } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
@@ -138,7 +139,7 @@ export async function impersonateUser(req: AuthenticatedRequest, res: Response):
     const token = jwt.sign(
       { id: user._id, email: user.email, role: user.role, tokenVersion: user.tokenVersion },
       env.jwtSecret,
-      { expiresIn: '15m' }
+      { expiresIn: '15m', jwtid: randomUUID() }
     )
 
     if (req.user?.id) await AuditLogModel.create({ userId: new mongoose.Types.ObjectId(req.user.id), event: 'ADMIN_IMPERSONATION', metadata: { targetUserId: user._id.toString() } })

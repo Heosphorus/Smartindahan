@@ -9,6 +9,8 @@ import authRoutes from './routes/authRoutes.js'
 import storeRoutes from './routes/storeRoutes.js'
 import businessRoutes from './routes/businessRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
+import legalRoutes from './routes/legalRoutes.js'
+import privacyRoutes from './routes/privacyRoutes.js'
 
 export const app = express()
 
@@ -38,8 +40,12 @@ function containsOverlongString(value: unknown): boolean {
   return false
 }
 
+// These endpoints carry real prose (a privacy message, policy text) and enforce their own, larger limits.
+const LONG_TEXT_ROUTES = new Set(['POST /api/privacy/requests', 'POST /api/auth/admin/policies'])
+
 app.use((req, res, next) => {
-  if (containsOverlongString(req.body) || containsOverlongString(req.query)) {
+  const ownLimits = LONG_TEXT_ROUTES.has(`${req.method} ${req.path.replace(/\/+$/, '')}`)
+  if (containsOverlongString(req.query) || (!ownLimits && containsOverlongString(req.body))) {
     res.status(400).json({ message: `Each text input must be ${MAX_INPUT_LENGTH} characters or fewer.` })
     return
   }
@@ -78,6 +84,8 @@ app.use('/api', (req, res, next) => {
   })
 })
 
+app.use('/api/legal', legalRoutes)
+app.use('/api/privacy', privacyRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/store', storeRoutes)
 app.use('/api/business', businessRoutes)

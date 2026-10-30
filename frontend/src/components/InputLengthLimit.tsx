@@ -7,6 +7,8 @@ function applyLengthLimit(root: ParentNode): void {
   const fields = Array.from(root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea'))
   if (root instanceof HTMLInputElement || root instanceof HTMLTextAreaElement) fields.push(root)
   fields.forEach((field) => {
+    // Long free-text boxes (for example a privacy request message) set their own limit and opt out with data-long-text.
+    if (field.hasAttribute('data-long-text')) return
     if (field instanceof HTMLTextAreaElement || TEXTUAL_INPUT_TYPES.has(field.type)) {
       field.maxLength = MAX_INPUT_LENGTH
     }

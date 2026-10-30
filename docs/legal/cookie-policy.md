@@ -1,17 +1,7 @@
-# Cookie Policy
+# Cookies and browser storage (internal summary)
 
-## Overview
+smarTindahan sets **no cookies**. The browser's local storage holds the session token (`sarismart_token`) and display preferences (theme, accent, font). Signing out removes the token from the device and revokes it on the server. There are no advertising or analytics trackers in the front end.
 
-smarTindahan uses only minimal browser storage needed to operate the application securely and conveniently. We do not use advertising cookies or third-party tracking cookies for marketing purposes.
+Third-party requests made by the browser: the optional barcode product-name lookup sends the barcode number to Open Food Facts.
 
-## Cookies and local storage
-
-We may use:
-
-- session-based authentication storage
-- local UI preferences
-- browser storage required for application functioning
-
-## Managing your preferences
-
-You may clear browser cookies and local storage at any time. Doing so may sign you out and remove custom settings related to the app interface.
+User-facing wording: Privacy Policy, section 3.

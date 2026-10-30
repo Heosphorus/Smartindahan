@@ -1,5 +1,7 @@
 # Data Breach Response Policy
 
+> Internal summary, not a user-facing policy and not legally reviewed. See [README](./README.md).
+
 ## Purpose
 
 This policy defines how smarTindahan responds to suspected or actual unauthorized access or exposure of customer or store data.

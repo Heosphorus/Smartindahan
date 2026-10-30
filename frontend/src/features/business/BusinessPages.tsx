@@ -4,6 +4,7 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { authApi } from '../../services/authApi'
 import { accentOptions, fontOptions, fontSizeOptions, getThemePreferences, saveThemePreferences, type ThemeMode } from '../../services/themePreferences'
 import './BusinessPages.css'
+import { PrivacySettings } from '../legal/PrivacySettings'
 import './SettingsPage.css'
 import './ThemeSettings.css'
 
@@ -753,6 +754,8 @@ export function SettingsPage() {
           )}
         </>
       )}
+
+      <PrivacySettings />
     </section>
   )
 }

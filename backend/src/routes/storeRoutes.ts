@@ -1,11 +1,12 @@
 import { Router } from 'express'
 
 import { authenticateToken, requireRole, requireStoreMembership } from '../middleware/authMiddleware.js'
+import { requirePolicyAcceptance } from '../middleware/policyMiddleware.js'
 import { bulkCreateProducts, createProduct, deleteProduct, getDashboardSummary, getProducts, updateProduct } from '../controllers/dashboardController.js'
 import { checkout, inventoryCount, lookupProduct, stockIn, stockOut } from '../controllers/operationsController.js'
 
 const router = Router()
-router.use(authenticateToken, requireRole('STORE_OWNER'), requireStoreMembership)
+router.use(authenticateToken, requireRole('STORE_OWNER'), requireStoreMembership, requirePolicyAcceptance)
 router.get('/dashboard', getDashboardSummary)
 router.get('/products', getProducts)
 router.post('/products', createProduct)

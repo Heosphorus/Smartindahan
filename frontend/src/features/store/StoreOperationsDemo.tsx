@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { POSFlow } from '../pos/POSFlow'
 import { storeApi, type DashboardSummary } from '../../services/storeApi'
 import { authApi } from '../../services/authApi'
+import { legalPath } from '../legal/legalRoutes'
 import { AlertsPage, CustomersPage, ExpensesPage, ReportsPage, SalesPage, SettingsPage, SuppliersPage } from '../business/BusinessPages'
 import { PriceListPage } from './PriceListPage'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -256,6 +257,10 @@ export function StoreOperationsDemo() {
 
         {dashboardError && <div className="dashboard-error" role="alert">{dashboardError} <button type="button" className="btn-secondary" onClick={() => { setDashboardError(''); setReloadCount((count) => count + 1) }}>Try again</button></div>}
         </div>
+        <footer className="app-legal-footer">
+          <a href={legalPath('terms')} target="_blank" rel="noopener noreferrer">Terms of Service<span className="sr-only"> (opens in a new tab)</span></a>
+          <a href={legalPath('privacy')} target="_blank" rel="noopener noreferrer">Privacy Policy<span className="sr-only"> (opens in a new tab)</span></a>
+        </footer>
       </main>
 
       {showLogoutModal && (

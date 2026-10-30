@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
@@ -14,6 +15,9 @@ const { app } = await import('../../src/server.js')
 const { UserModel } = await import('../../src/models/User.js')
 const { ProductModel } = await import('../../src/models/Product.js')
 const { SaleModel } = await import('../../src/models/Sale.js')
+const { ConsentRecordModel } = await import('../../src/models/ConsentRecord.js')
+const { PolicyVersionModel } = await import('../../src/models/PolicyVersion.js')
+const { currentPolicy, recordConsent, resetPolicySeedState } = await import('../../src/services/policyService.js')
 
 export { env }
 
@@ -25,7 +29,8 @@ let baseUrl = ''
 export async function startTestServer(): Promise<void> {
   replicaSet = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: 'wiredTiger' } })
   await mongoose.connect(replicaSet.getUri('smartindahan_test'))
-  await Promise.all([UserModel.init(), ProductModel.init(), SaleModel.init()])
+  await Promise.all([UserModel.init(), ProductModel.init(), SaleModel.init(), ConsentRecordModel.init(), PolicyVersionModel.init()])
+  resetPolicySeedState()
   httpServer = app.listen(0)
   await new Promise<void>((resolve, reject) => {
     httpServer!.once('listening', resolve)
@@ -59,12 +64,12 @@ export async function api<T = Record<string, unknown>>(path: string, options: { 
 }
 
 export function tokenFor(user: { id: string; email: string; role: string; tokenVersion?: number }, tokenVersion = user.tokenVersion ?? 0): string {
-  return jwt.sign({ id: user.id, email: user.email, role: user.role, tokenVersion }, env.jwtSecret, { expiresIn: '1h' })
+  return jwt.sign({ id: user.id, email: user.email, role: user.role, tokenVersion }, env.jwtSecret, { expiresIn: '1h', jwtid: randomUUID() })
 }
 
 let counter = 0
 
-export async function createStore(options: { password?: string; verified?: boolean; role?: 'STORE_OWNER' | 'ADMIN' } = {}) {
+export async function createStore(options: { password?: string; verified?: boolean; role?: 'STORE_OWNER' | 'ADMIN'; acceptPolicies?: boolean } = {}) {
   counter += 1
   const suffix = `${Date.now()}-${counter}`
   const password = options.password ?? 'Passw0rdTest'
@@ -73,6 +78,13 @@ export async function createStore(options: { password?: string; verified?: boole
     passwordHash: await bcrypt.hash(password, 4), storeName: `Test Store ${suffix}`, storeAddress: 'Test Street',
     role: options.role ?? 'STORE_OWNER', isEmailVerified: options.verified ?? true, isActive: true,
   })
+  if (options.acceptPolicies ?? true) {
+    // A fixture for a user who really did accept the current policies (the app never invents these records).
+    for (const [policyType, consentType] of [['terms', 'TERMS_OF_SERVICE'], ['privacy', 'PRIVACY_NOTICE']] as const) {
+      const policy = await currentPolicy(policyType)
+      await recordConsent({ userId: user._id, consentType, policyVersion: policy!.version, source: 'SETTINGS' })
+    }
+  }
   return { user, password, email: user.email, id: user.id as string, token: tokenFor({ id: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion }) }
 }
 

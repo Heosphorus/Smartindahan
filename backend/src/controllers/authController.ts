@@ -1,12 +1,14 @@
 import bcrypt from 'bcryptjs'
 import type { Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
+import { randomUUID } from 'node:crypto'
 import mongoose from 'mongoose'
 
 import { env } from '../config/env.js'
 import { AuditLogModel, type AuditEvent } from '../models/AuditLog.js'
 import { EmailVerificationModel } from '../models/EmailVerification.js'
 import { PasswordResetModel } from '../models/PasswordReset.js'
+import { RevokedTokenModel } from '../models/RevokedToken.js'
 import { UserModel } from '../models/User.js'
 import {
   generateOtp,
@@ -16,6 +18,7 @@ import {
   validatePasswordStrength,
   verifyOtpHash,
 } from '../services/authService.js'
+import { currentPolicy, recordConsent } from '../services/policyService.js'
 import { sendPasswordResetEmail, sendVerificationEmail } from '../services/emailService.js'
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.js'
 import { parseObjectId } from '../utils/objectId.js'
@@ -23,6 +26,11 @@ import { parseObjectId } from '../utils/objectId.js'
 const OTP_MAX_ATTEMPTS = 5
 const OTP_EXPIRES_MS = 5 * 60 * 1000
 const LOGIN_LOCK_MS = 15 * 60 * 1000
+let cachedDummyHash: string | undefined
+async function dummyPasswordHash(): Promise<string> {
+  cachedDummyHash ??= await bcrypt.hash(randomUUID(), 12)
+  return cachedDummyHash
+}
 const loginRate = new Map<string, { count: number; firstRequestAt: number }>()
 
 type RegisterPayload = {
@@ -36,10 +44,12 @@ type RegisterPayload = {
   storeAddress?: string
   privacyPolicyAccepted?: boolean
   termsAccepted?: boolean
+  termsVersion?: string
+  privacyVersion?: string
 }
 
 function issueToken(user: { id: string; email: string; role: string; tokenVersion: number }): string {
-  const options = { expiresIn: env.jwtExpiresIn ?? '7d' } as jwt.SignOptions
+  const options = { expiresIn: env.jwtExpiresIn ?? '7d', jwtid: randomUUID() } as jwt.SignOptions
   return jwt.sign({ id: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion }, env.jwtSecret, options)
 }
 
@@ -90,7 +100,7 @@ function userResponse(user: { _id: mongoose.Types.ObjectId; firstName: string; l
 }
 
 export async function register(req: Request, res: Response): Promise<void> {
-  const payload = req.body as RegisterPayload
+  const payload = (req.body ?? {}) as RegisterPayload
   const required = [payload.firstName, payload.lastName, payload.email, payload.mobileNumber, payload.password, payload.confirmPassword, payload.storeName, payload.storeAddress]
 
   if (required.some((value) => typeof value !== 'string' || !value.trim())) {
@@ -98,8 +108,19 @@ export async function register(req: Request, res: Response): Promise<void> {
     return
   }
 
-  if (payload.privacyPolicyAccepted !== true || payload.termsAccepted !== true) {
-    res.status(400).json({ message: 'You must accept the Privacy Policy and Terms of Service before creating an account.' })
+  // The server enforces the agreement itself: the checkbox in the browser is only a convenience.
+  if (payload.termsAccepted !== true || payload.privacyPolicyAccepted !== true) {
+    res.status(400).json({ code: 'AGREEMENT_REQUIRED', message: 'Please confirm that you have read and agree to the Terms of Service and acknowledge the Privacy Policy to create an account.' })
+    return
+  }
+  const [terms, privacy] = await Promise.all([currentPolicy('terms'), currentPolicy('privacy')])
+  if (!terms || !privacy) {
+    res.status(503).json({ message: 'The policies are temporarily unavailable. Please try again shortly.' })
+    return
+  }
+  // The user must have agreed to the versions they were shown, not whatever happens to be current when the request arrives.
+  if (payload.termsVersion !== terms.version || payload.privacyVersion !== privacy.version) {
+    res.status(409).json({ code: 'POLICY_VERSION_MISMATCH', message: 'The Terms of Service or Privacy Policy were updated. Please review the current versions and confirm again.' })
     return
   }
 
@@ -133,40 +154,52 @@ export async function register(req: Request, res: Response): Promise<void> {
     return
   }
 
-  const user = await UserModel.create({
-    firstName: payload.firstName!.trim(),
-    lastName: payload.lastName!.trim(),
-    email,
-    mobileNumber: payload.mobileNumber!.trim(),
-    passwordHash: await bcrypt.hash(payload.password!, 12),
-    storeName,
-    storeAddress: payload.storeAddress!.trim(),
-    role: 'STORE_OWNER',
-    privacyPolicyAccepted: true,
-    termsAccepted: true,
-    acceptedPoliciesAt: new Date(),
-  })
-
+  const passwordHash = await bcrypt.hash(payload.password!, 12)
   const otp = generateOtp()
-  await EmailVerificationModel.deleteMany({ userId: user._id, verified: false })
-  await EmailVerificationModel.create({
-    userId: user._id,
-    otpHash: hashOtp(otp),
-    expiresAt: new Date(Date.now() + OTP_EXPIRES_MS),
-  })
-
+  const session = await mongoose.startSession()
+  let userId: mongoose.Types.ObjectId
   try {
-    await sendVerificationEmail(user.email, otp)
-  } catch {
-    await UserModel.deleteOne({ _id: user._id })
-    await EmailVerificationModel.deleteMany({ userId: user._id })
-    res.status(502).json({ message: 'Unable to send verification email at the moment.' })
+    // The account, its agreement records and its verification code are created together or not at all. The email is sent
+    // last, so a failed delivery rolls everything back and leaves no account and no acceptance record behind.
+    session.startTransaction()
+    const [created] = await UserModel.create([{
+      firstName: payload.firstName!.trim(),
+      lastName: payload.lastName!.trim(),
+      email,
+      mobileNumber: payload.mobileNumber!.trim(),
+      passwordHash,
+      storeName,
+      storeAddress: payload.storeAddress!.trim(),
+      role: 'STORE_OWNER',
+      privacyPolicyAccepted: true,
+      termsAccepted: true,
+      acceptedPoliciesAt: new Date(),
+    }], { session })
+    userId = created!._id
+    await recordConsent({ userId, consentType: 'TERMS_OF_SERVICE', policyVersion: terms.version, source: 'REGISTRATION' }, session)
+    await recordConsent({ userId, consentType: 'PRIVACY_NOTICE', policyVersion: privacy.version, source: 'REGISTRATION' }, session)
+    await EmailVerificationModel.create([{ userId, otpHash: hashOtp(otp), expiresAt: new Date(Date.now() + OTP_EXPIRES_MS) }], { session })
+    await sendVerificationEmail(email, otp)
+    await session.commitTransaction()
+  } catch (error) {
+    await session.abortTransaction().catch(() => undefined)
+    const duplicate = error && typeof error === 'object' && 'code' in error && error.code === 11000
+    if (duplicate) {
+      res.status(409).json({ message: 'An account with this email or store name already exists.' })
+      return
+    }
+    console.error('Registration failed:', error instanceof Error ? error.name : 'UnknownError')
+    res.status(502).json({ message: 'We could not complete your registration and nothing was saved. Please try again in a moment.' })
     return
+  } finally {
+    await session.endSession()
   }
 
-  await audit(req, 'USER_REGISTERED', user._id)
-  await audit(req, 'EMAIL_VERIFICATION_REQUESTED', user._id)
-  res.status(201).json({ message: 'Registration successful. Please verify your email.', user: { id: user.id, email, status: 'EMAIL_VERIFICATION_REQUIRED', maskedEmail: maskEmail(email) } })
+  await audit(req, 'USER_REGISTERED', userId)
+  await audit(req, 'CONSENT_RECORDED', userId, { consentType: 'TERMS_OF_SERVICE', policyVersion: terms.version, source: 'REGISTRATION' })
+  await audit(req, 'CONSENT_RECORDED', userId, { consentType: 'PRIVACY_NOTICE', policyVersion: privacy.version, source: 'REGISTRATION' })
+  await audit(req, 'EMAIL_VERIFICATION_REQUESTED', userId)
+  res.status(201).json({ message: 'Registration successful. Please verify your email.', user: { id: userId.toString(), email, status: 'EMAIL_VERIFICATION_REQUIRED', maskedEmail: maskEmail(email) } })
 }
 
 export async function verifyEmail(req: Request, res: Response): Promise<void> {
@@ -261,6 +294,8 @@ export async function login(req: Request, res: Response): Promise<void> {
 
   const user = await UserModel.findOne({ email }).select('+passwordHash')
   if (!user || !user.isActive) {
+    // Spend the same time as a real password check so response timing does not reveal which emails are registered.
+    await bcrypt.compare(password, await dummyPasswordHash())
     await audit(req, 'LOGIN_FAILED')
     res.status(401).json({ message: 'Invalid email or password.' })
     return
@@ -300,6 +335,10 @@ export async function login(req: Request, res: Response): Promise<void> {
 
 export async function logout(req: AuthenticatedRequest, res: Response): Promise<void> {
   const userId = parseObjectId(req.user?.id)
+  if (req.user?.jti && req.user.tokenExpiresAt) {
+    // Revoke exactly this session token; other devices stay signed in.
+    await RevokedTokenModel.updateOne({ jti: req.user.jti }, { $setOnInsert: { expiresAt: req.user.tokenExpiresAt } }, { upsert: true })
+  }
   if (userId) await audit(req, 'LOGOUT', userId)
   res.status(200).json({ message: 'Logged out successfully.' })
 }

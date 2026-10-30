@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
@@ -39,7 +40,7 @@ test('store API scopes resources and ignores forged role and ownership fields', 
     })
     const address = httpServer.address() as AddressInfo
     const baseUrl = `http://127.0.0.1:${address.port}`
-    const ownerTokenWithForgedAdminRole = jwt.sign({ id: ownerAId.toString(), role: 'ADMIN', tokenVersion: 0 }, env.jwtSecret, { expiresIn: '1m' })
+    const ownerTokenWithForgedAdminRole = jwt.sign({ id: ownerAId.toString(), role: 'ADMIN', tokenVersion: 0 }, env.jwtSecret, { expiresIn: '1m', jwtid: randomUUID() })
 
     const listResponse = await fetch(`${baseUrl}/api/store/products`, { headers: { Authorization: `Bearer ${ownerTokenWithForgedAdminRole}` } })
     assert.equal(listResponse.status, 200)

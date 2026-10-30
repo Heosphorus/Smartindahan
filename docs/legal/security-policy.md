@@ -1,5 +1,7 @@
 # Security Policy
 
+> Internal summary, not a user-facing policy and not legally reviewed. See [README](./README.md).
+
 ## Security goals
 
 smarTindahan aims to protect account access, store data, and operational records from unauthorized deletion, tampering, or disclosure.

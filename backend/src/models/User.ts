@@ -17,6 +17,9 @@ const userSchema = new Schema({
   privacyPolicyAccepted: { type: Boolean, default: false, required: true },
   termsAccepted: { type: Boolean, default: false, required: true },
   acceptedPoliciesAt: { type: Date },
+  // Set when the owner asks to close the account; the data is purged once deletionScheduledFor has passed.
+  deletionRequestedAt: { type: Date },
+  deletionScheduledFor: { type: Date },
   failedLoginAttempts: { type: Number, default: 0, required: true },
   tokenVersion: { type: Number, default: 0, required: true, min: 0 },
   lockedUntil: { type: Date },

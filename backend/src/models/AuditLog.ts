@@ -1,5 +1,7 @@
 import { Schema, model, type InferSchemaType } from 'mongoose'
 
+import { appendOnly } from './immutable.js'
+
 export const auditEvents = [
   'USER_REGISTERED', 'EMAIL_VERIFICATION_REQUESTED', 'EMAIL_VERIFIED',
   'LOGIN_SUCCESSFUL', 'LOGIN_FAILED', 'OTP_REQUESTED', 'OTP_VERIFICATION_FAILED',
@@ -10,6 +12,9 @@ export const auditEvents = [
   'CUSTOMER_CREATED', 'CUSTOMER_UPDATED', 'CUSTOMER_ARCHIVED',
   'SUPPLIER_CREATED', 'SUPPLIER_UPDATED', 'SUPPLIER_ARCHIVED',
   'EXPENSE_CREATED', 'EXPENSE_UPDATED', 'EXPENSE_ARCHIVED',
+  'CONSENT_RECORDED', 'POLICY_PUBLISHED', 'ACCOUNT_UPDATED', 'DATA_EXPORT_REQUESTED',
+  'ACCOUNT_DELETION_REQUESTED', 'ACCOUNT_DELETION_CANCELLED', 'ACCOUNT_DELETED',
+  'PRIVACY_REQUEST_SUBMITTED', 'PRIVACY_REQUEST_UPDATED',
 ] as const
 export type AuditEvent = (typeof auditEvents)[number]
 
@@ -26,6 +31,7 @@ const auditLogSchema = new Schema({
 
 auditLogSchema.index({ storeId: 1, createdAt: -1 })
 auditLogSchema.index({ userId: 1, createdAt: -1 })
+appendOnly(auditLogSchema)
 
 export type AuditLogDocument = InferSchemaType<typeof auditLogSchema>
 export const AuditLogModel = model('AuditLog', auditLogSchema)

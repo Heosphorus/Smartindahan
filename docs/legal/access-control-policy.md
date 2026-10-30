@@ -1,5 +1,7 @@
 # Access Control Policy
 
+> Internal summary, not a user-facing policy and not legally reviewed. See [README](./README.md).
+
 ## Principle
 
 Access is granted on a least-privilege basis. Users should only have the permissions needed to perform their assigned role.

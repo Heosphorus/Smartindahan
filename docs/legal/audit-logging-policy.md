@@ -1,5 +1,7 @@
 # Audit Logging Policy
 
+> Internal summary, not a user-facing policy and not legally reviewed. See [README](./README.md).
+
 ## Purpose
 
 SariSmart maintains security and operational audit logs to support accountability and forensic review.

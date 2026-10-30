@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express'
 import jwt, { type JwtPayload } from 'jsonwebtoken'
 
 import { env } from '../config/env.js'
+import { RevokedTokenModel } from '../models/RevokedToken.js'
 import { UserModel } from '../models/User.js'
 import { parseObjectId } from '../utils/objectId.js'
 
@@ -11,6 +12,8 @@ export interface AuthenticatedRequest extends Request {
     email: string
     role: string
     storeId?: string
+    jti?: string
+    tokenExpiresAt?: Date
   }
 }
 
@@ -29,6 +32,12 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
     if (typeof verified === 'string') throw new Error('Invalid token payload')
     decoded = verified
   } catch {
+    res.status(401).json({ message: 'Session expired or invalid token.' })
+    return
+  }
+
+  // Every session token has a unique id so signing out can revoke exactly that token.
+  if (typeof decoded.jti !== 'string' || await RevokedTokenModel.exists({ jti: decoded.jti })) {
     res.status(401).json({ message: 'Session expired or invalid token.' })
     return
   }
@@ -53,6 +62,8 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
     id: user._id.toString(),
     email: user.email,
     role: user.role,
+    jti: decoded.jti,
+    ...(typeof decoded.exp === 'number' ? { tokenExpiresAt: new Date(decoded.exp * 1000) } : {}),
     ...(user.role === 'STORE_OWNER' ? { storeId: user._id.toString() } : {}),
   }
   next()

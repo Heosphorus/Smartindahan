@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 
 import { ApiError } from '../../services/apiClient'
 import { authApi } from '../../services/authApi'
-import { PolicyModal, type PolicyKind } from '../legal/PolicyModal'
+import { legalApi, type PolicySummary } from '../../services/legalApi'
+import { legalPath } from '../legal/legalRoutes'
+import '../legal/Legal.css'
 import './AuthPage.css'
 
 type AuthMode = 'login' | 'register' | 'verify' | 'forgot' | 'reset'
 
 const initialRegistration = {
-  firstName: '', lastName: '', email: '', mobileNumber: '', password: '', confirmPassword: '', storeName: '', storeAddress: '', privacyPolicyAccepted: false, termsAccepted: false,
+  firstName: '', lastName: '', email: '', mobileNumber: '', password: '', confirmPassword: '', storeName: '', storeAddress: '',
 } as const
 
 export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string) => void }) {
@@ -24,7 +26,12 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [cooldown, setCooldown] = useState(0)
-  const [openPolicy, setOpenPolicy] = useState<PolicyKind | null>(null)
+  // The agreement box starts unchecked and is never checked for the user.
+  const [agreed, setAgreed] = useState(false)
+  const [agreementError, setAgreementError] = useState('')
+  const [policies, setPolicies] = useState<{ terms: PolicySummary; privacy: PolicySummary } | null>(null)
+  const [policiesFailed, setPoliciesFailed] = useState(false)
+  const agreementBox = useRef<HTMLInputElement>(null)
   const otpInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -33,9 +40,32 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
     return () => window.clearInterval(timer)
   }, [cooldown])
 
+  const [policyAttempt, setPolicyAttempt] = useState(0)
+
+  // Fetch the policy versions the user is about to agree to; the server checks the same versions on submit.
+  useEffect(() => {
+    if (mode !== 'register' || policies) return undefined
+    let active = true
+    legalApi.current().then(({ policies: list }) => {
+      if (!active) return
+      const terms = list.find((policy) => policy.policyType === 'terms')
+      const privacy = list.find((policy) => policy.policyType === 'privacy')
+      if (terms && privacy) setPolicies({ terms, privacy })
+      else setPoliciesFailed(true)
+    }).catch(() => { if (active) setPoliciesFailed(true) })
+    return () => { active = false }
+  }, [mode, policies, policyAttempt])
+
+  function reloadPolicies() {
+    setPoliciesFailed(false)
+    setPolicies(null)
+    setPolicyAttempt((count) => count + 1)
+  }
+
   function clearFeedback() {
     setError('')
     setMessage('')
+    setAgreementError('')
   }
 
   function changeMode(nextMode: AuthMode) {
@@ -44,7 +74,7 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
     setOtp('')
   }
 
-  function updateField(field: keyof typeof initialRegistration, value: string | boolean) {
+  function updateField(field: keyof typeof initialRegistration, value: string) {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -62,14 +92,31 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
 
   async function register() {
     await submit(async () => {
-      if (!form.privacyPolicyAccepted || !form.termsAccepted) {
-        throw new Error('Please accept the Privacy Policy and Terms of Service to continue.')
+      if (!agreed) {
+        setAgreementError('Please tick the box to confirm you have read and agree to the Terms of Service and acknowledge the Privacy Policy.')
+        agreementBox.current?.focus()
+        return
       }
-      const response = await authApi.register({
-        ...form,
-        privacyPolicyAccepted: form.privacyPolicyAccepted,
-        termsAccepted: form.termsAccepted,
-      })
+      if (!policies) {
+        throw new Error('The Terms of Service and Privacy Policy could not be loaded. Please check your connection and try again.')
+      }
+      let response
+      try {
+        response = await authApi.register({
+          ...form,
+          termsAccepted: true,
+          privacyPolicyAccepted: true,
+          termsVersion: policies.terms.version,
+          privacyVersion: policies.privacy.version,
+        })
+      } catch (caught) {
+        // The policies changed while the form was open: show the new versions and ask again.
+        if (caught instanceof ApiError && caught.status === 409 && (caught.data as { code?: string } | null)?.code === 'POLICY_VERSION_MISMATCH') {
+          setAgreed(false)
+          reloadPolicies()
+        }
+        throw caught
+      }
       setUserId(response.user?.id ?? '')
       setMaskedEmail(response.user?.maskedEmail ?? '')
       setMode('verify')
@@ -187,8 +234,16 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
             <div className="auth-two-col"><label>Password<input type="password" value={form.password} onChange={(event) => updateField('password', event.target.value)} required /></label><label>Confirm password<input type="password" value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} required /></label></div>
             <label>Store name<input value={form.storeName} onChange={(event) => updateField('storeName', event.target.value)} required /></label>
             <label>Store address<input value={form.storeAddress} onChange={(event) => updateField('storeAddress', event.target.value)} required /></label>
-            <label className="auth-consent-row"><input type="checkbox" checked={Boolean(form.termsAccepted)} onChange={(event) => updateField('termsAccepted', event.target.checked)} required /> I agree to the <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('terms')}>Terms of Service</button> and <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('privacy')}>Privacy Policy</button>.</label>
-            <label className="auth-consent-row"><input type="checkbox" checked={Boolean(form.privacyPolicyAccepted)} onChange={(event) => updateField('privacyPolicyAccepted', event.target.checked)} required /> I consent to the processing of my store data as described in the <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('cookies')}>Cookie Policy</button> and <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('security')}>Security Policy</button>.</label>
+            <div className="consent-box">
+              <label className="consent-label" htmlFor="agree-terms">
+                <input id="agree-terms" ref={agreementBox} type="checkbox" checked={agreed} aria-invalid={Boolean(agreementError)} aria-describedby={agreementError ? 'agree-error agree-note' : 'agree-note'}
+                  onChange={(event) => { setAgreed(event.target.checked); if (event.target.checked) setAgreementError('') }} />
+                <span>I have read and agree to the <a href={legalPath('terms', policies?.terms.version)} target="_blank" rel="noopener noreferrer">Terms of Service<span className="sr-only"> (opens in a new tab)</span></a> and acknowledge the <a href={legalPath('privacy', policies?.privacy.version)} target="_blank" rel="noopener noreferrer">Privacy Policy<span className="sr-only"> (opens in a new tab)</span></a>.</span>
+              </label>
+              <p id="agree-note" className="consent-note">The links open in a new tab, so what you typed here is kept. We send no marketing messages.</p>
+              {agreementError && <p id="agree-error" className="consent-error" role="alert">{agreementError}</p>}
+              {policiesFailed && <p className="consent-error" role="alert">We could not load the current policies. <button type="button" className="auth-link" onClick={reloadPolicies}>Try again</button></p>}
+            </div>
             <button className="auth-primary" disabled={busy}>{busy ? 'Creating account...' : 'Create account'}</button>
           </form>}
 
@@ -203,14 +258,11 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
 
           <div className="auth-switch">{mode === 'login' ? <>Don't have an account? <button className="auth-link" type="button" onClick={() => changeMode('register')}>Create one</button></> : <button className="auth-link" type="button" onClick={() => changeMode('login')}>Back to sign in</button>}</div>
           <div className="auth-legal-links">
-            <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('privacy')}>Privacy Policy</button>
-            <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('terms')}>Terms of Service</button>
-            <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('cookies')}>Cookie Policy</button>
-            <button type="button" className="policy-inline-link" onClick={() => setOpenPolicy('security')}>Security Policy</button>
+            <a href={legalPath('terms')} target="_blank" rel="noopener noreferrer">Terms of Service<span className="sr-only"> (opens in a new tab)</span></a>
+            <a href={legalPath('privacy')} target="_blank" rel="noopener noreferrer">Privacy Policy<span className="sr-only"> (opens in a new tab)</span></a>
           </div>
         </div>
       </section>
-      {openPolicy && <PolicyModal kind={openPolicy} onClose={() => setOpenPolicy(null)} />}
     </main>
   )
 }

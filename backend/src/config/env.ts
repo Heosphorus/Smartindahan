@@ -29,6 +29,7 @@ export const env = {
   mongoUri: process.env.MONGODB_URI ?? '',
   jwtSecret: process.env.JWT_SECRET ?? 'development-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
+  accountDeletionGraceDays: Math.max(0, Number.parseInt(process.env.ACCOUNT_DELETION_GRACE_DAYS ?? '14', 10) || 0),
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:5173',
   emailMode: process.env.EMAIL_MODE ?? 'development',
   emailProvider: process.env.EMAIL_PROVIDER ?? 'resend',

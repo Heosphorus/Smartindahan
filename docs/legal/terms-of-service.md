@@ -1,24 +1,9 @@
 # Terms of Service
 
-## Scope
+The Terms of Service are a versioned, immutable record in the database, not a Markdown file.
 
-These terms govern the use of smarTindahan by store owners, managers, and authorized users who access the system for commercial operations.
+- Read them in the app at `/terms` (older versions: `/terms?version=<id>`).
+- Initial text: [`backend/src/legal/initialPolicies.ts`](../../backend/src/legal/initialPolicies.ts).
+- Publishing a new version: see [../privacy-and-consent.md](../privacy-and-consent.md#publishing-a-new-policy-version).
 
-## User responsibilities
-
-- maintain confidential account credentials
-- provide accurate information during registration
-- use the platform only for lawful and authorized store operations
-- keep security controls active and promptly notify the service of any suspicious activity
-
-## Service availability
-
-smarTindahan is provided as a service platform and may be updated, maintained, or temporarily restricted to protect performance and security. Availability is not guaranteed at all times.
-
-## Prohibited conduct
-
-Users must not misuse the platform for fraud, unauthorized access, criminal operations, abusive messages, unlawful resale activity, or other harmful conduct.
-
-## Limitation of liability
-
-The platform is provided on an as-is basis, and the service provider is not liable for indirect or consequential losses unless required by applicable law.
+They are a **draft** that needs the owner's details and legal review before launch.

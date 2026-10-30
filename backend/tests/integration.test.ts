@@ -308,7 +308,9 @@ test('change password: needs the current password, signs out other sessions, ret
 
 test('registration, email verification and login work end to end', async () => {
   const email = `new-owner-${Date.now()}@example.test`
-  const registration = { firstName: 'Ana', lastName: 'Cruz', email, mobileNumber: '09171234567', password: 'Passw0rdTest', confirmPassword: 'Passw0rdTest', storeName: `Ana Store ${Date.now()}`, storeAddress: 'Quezon City', privacyPolicyAccepted: true, termsAccepted: true }
+  const policies = await api<{ policies: Array<{ policyType: string; version: string }> }>('/api/legal/policies')
+  const versionOf = (type: string) => policies.body.policies.find((policy) => policy.policyType === type)!.version
+  const registration = { firstName: 'Ana', lastName: 'Cruz', email, mobileNumber: '09171234567', password: 'Passw0rdTest', confirmPassword: 'Passw0rdTest', storeName: `Ana Store ${Date.now()}`, storeAddress: 'Quezon City', privacyPolicyAccepted: true, termsAccepted: true, termsVersion: versionOf('terms'), privacyVersion: versionOf('privacy') }
 
   assert.equal((await api('/api/auth/register', { body: { ...registration, termsAccepted: false } })).status, 400)
   assert.equal((await api('/api/auth/register', { body: { ...registration, password: 'weak', confirmPassword: 'weak' } })).status, 400)

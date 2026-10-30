@@ -12,6 +12,7 @@ smarTindahan is a web app that helps sari-sari store owners run the shop: record
 | Price list | Add, edit, archive products; bulk add; set minimum stock; set exact stock by recount. Sales history keeps the price and cost at the time of sale. |
 | Business | Sales history, customers (name/contact/credit limit), suppliers, expenses, low-stock alerts, sales report (revenue, gross profit, margin, daily and payment-method breakdown), settings and theme. |
 | Barcode | Camera scanning via ZXing, optional product-name lookup from Open Food Facts. |
+| Legal and privacy | Public Terms of Service and Privacy Policy pages (versioned, **draft**), an unchecked agreement box at registration enforced by the API, consent records, re-acceptance when Terms change, data download, privacy requests and account deletion with a waiting period. See [docs/privacy-and-consent.md](docs/privacy-and-consent.md). |
 
 See [Known limitations](#known-limitations) for what is **not** implemented (for example credit/utang ledgers and purchase orders).
 
@@ -81,6 +82,7 @@ Real values go in `backend/.env` (local) or in the Vercel project settings (prod
 | `EMAIL_MODE` | backend | `development` (nothing is sent) or `production`. Production refuses `development`. |
 | `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM` | backend | Resend delivery. |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD` | backend | SMTP alternative (`EMAIL_PROVIDER=smtp`). |
+| `ACCOUNT_DELETION_GRACE_DAYS` | backend | Waiting period before a closed account is permanently deleted (default 14). |
 | `MONGODB_MAX_POOL_SIZE`, `MONGODB_MIN_POOL_SIZE` | backend | Optional pool tuning (defaults: 20/2, or 5/0 on Vercel). |
 | `VITE_API_URL` | frontend (build time) | API base URL. Leave unset for local dev and Vercel (`/api`); set the full URL for GitHub Pages. **Public** — never put secrets in `VITE_*` variables. |
 | `VITE_BASE_PATH` | frontend (build time) | Sub-path for GitHub Pages (set by the workflow). |
@@ -147,6 +149,14 @@ The app uses `Authorization: Bearer` tokens kept in `localStorage`, not cookies,
 - The app currently stores data in whatever database the connection string names. If `MONGODB_URI` has no database name in its path, MongoDB uses `test`. Existing data may live there; add a name only after migrating it.
 - Visual testing was done at phone and desktop widths in one browser; dark mode and tablet widths were only spot-checked.
 
+## Privacy and legal (draft, not launch-ready)
+
+- The Terms of Service and Privacy Policy are **drafts with highlighted placeholders** (operator name, contacts, regions, retention periods). They have not been reviewed by the owner or by Philippine counsel, and the app makes no claim of legal compliance. Complete [the owner checklist](docs/privacy-and-consent.md#owner-decisions-and-legal-review-before-launch) first.
+- After deploying, run `npm run create-indexes --prefix backend` (new collections) and **schedule `npm run purge-deleted-accounts --prefix backend` daily**; until then, accounts whose deletion period ended are not deleted.
+- Signing out revokes the token on the server. Tokens issued before this change are rejected, so everyone signs in once more.
+- Existing accounts have no consent record; they are asked to accept the Terms on next sign-in (nothing is back-filled).
+- Not built: marketing consent (the app sends no marketing), admin screens for policies/requests/audit logs, self-service email change, retention jobs for audit/consent records.
+
 ## Security notes
 
 - `backend/.env` is ignored by Git. **An earlier commit (`0553dbd`) contained a real `backend/.env`** (Atlas credentials and a Resend API key). Rotate the Atlas database user's password and the Resend key, because Git history is permanent for anyone who can read the repository.
@@ -157,6 +167,7 @@ The app uses `Authorization: Bearer` tokens kept in `localStorage`, not cookies,
 
 - [docs/database.md](docs/database.md) — Atlas setup, access list, indexes, transactions
 - [docs/testing.md](docs/testing.md) — test suites and how to run them
+- [docs/privacy-and-consent.md](docs/privacy-and-consent.md) — policies, consent records, versions, data export/deletion, owner decisions
 - [docs/api/barcode-inventory.md](docs/api/barcode-inventory.md) — barcode/inventory API contract
 - [docs/legal/](docs/legal) — privacy, terms, security and retention policies
 - [docs/audits/](docs/audits) — earlier audit notes

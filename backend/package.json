@@ -11,6 +11,7 @@
     "test": "node --test --import tsx \"tests/**/*.test.ts\"",
     "create-admin": "tsx src/scripts/createAdmin.ts",
     "create-indexes": "tsx src/scripts/createIndexes.ts",
+    "purge-deleted-accounts": "tsx src/scripts/purgeDeletedAccounts.ts",
     "dev:memory": "tsx dev/memoryServer.ts"
   },
   "keywords": [],
