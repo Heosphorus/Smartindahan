@@ -1,5 +1,10 @@
 name: Deploy frontend to GitHub Pages
 
+# GitHub Pages only hosts the static React build. The Express API must be deployed separately
+# (see README, "Deployment"), and its URL is supplied through the VITE_API_URL repository variable.
+# In Settings -> Pages, the Source must be "GitHub Actions" (not "Deploy from a branch"),
+# otherwise GitHub publishes the repository root and shows the README instead of the app.
+
 on:
   push:
     branches: [main]
@@ -24,14 +29,24 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Require the production API URL
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: |
+          if [ -z "$VITE_API_URL" ]; then
+            echo "::error::Set the repository variable VITE_API_URL (Settings > Secrets and variables > Actions > Variables) to the deployed backend URL, e.g. https://your-project.vercel.app/api"
+            exit 1
+          fi
       - run: npm ci
         working-directory: frontend
       - name: Build frontend for GitHub Pages
         run: npm run build
         working-directory: frontend
         env:
-          GITHUB_PAGES: 'true'
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_API_URL: ${{ vars.VITE_API_URL }}
+      - name: Add SPA fallback (GitHub Pages serves 404.html for unknown paths)
+        run: cp frontend/dist/index.html frontend/dist/404.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/dist

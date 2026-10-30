@@ -1,5 +1,4 @@
-import { handleAuthenticatedUnauthorized } from './apiSession'
-import { API_BASE_URL } from './apiBase'
+import { apiRequest } from './apiClient'
 
 type ApiResponse = {
   message?: string
@@ -23,27 +22,13 @@ type ApiResponse = {
   }
 }
 
-async function request(path: string, body?: unknown, token?: string): Promise<ApiResponse> {
-  const response = await fetch(`${API_BASE_URL}/auth${path}`, {
-    method: body ? 'POST' : 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
+function request(path: string, body?: unknown, token?: string, method?: string): Promise<ApiResponse> {
+  return apiRequest<ApiResponse>(`/auth${path}`, {
+    ...(body !== undefined ? { body } : {}),
+    ...(method ? { method } : {}),
+    // Public endpoints (login, register, reset...) must never carry a stale session token.
+    token: token ?? null,
   })
-  handleAuthenticatedUnauthorized(response.status, Boolean(token))
-
-  const contentType = response.headers.get('content-type') ?? ''
-  if (!contentType.includes('application/json')) {
-    throw new Error(`The authentication API returned an unexpected response from ${response.url}. Restart the backend and reload the frontend.`)
-  }
-
-  const data = await response.json() as ApiResponse
-  if (!response.ok) {
-    throw new Error(data.message ?? 'Something went wrong. Please try again.')
-  }
-  return data
 }
 
 export const authApi = {
@@ -55,7 +40,7 @@ export const authApi = {
   verifyResetOtp: (userId: string, otp: string) => request('/verify-reset-otp', { userId, otp }),
   resetPassword: (userId: string, password: string, confirmPassword: string) => request('/reset-password', { userId, password, confirmPassword }),
   changePassword: (token: string, currentPassword: string, newPassword: string, confirmPassword: string) => request('/change-password', { currentPassword, newPassword, confirmPassword }, token),
-  logout: (token: string) => request('/logout', undefined, token),
+  logout: (token: string) => request('/logout', {}, token),
   // Admin endpoints
   adminGetUsers: (token: string) => request('/admin/users', undefined, token),
   adminGetStats: (token: string) => request('/admin/stats', undefined, token),

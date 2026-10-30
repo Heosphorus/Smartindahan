@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
+import { ApiError } from '../../services/apiClient'
 import { authApi } from '../../services/authApi'
 import { PolicyModal, type PolicyKind } from '../legal/PolicyModal'
 import './AuthPage.css'
@@ -99,7 +100,22 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
 
   async function login() {
     await submit(async () => {
-      const response = await authApi.login(email, password)
+      let response
+      try {
+        response = await authApi.login(email, password)
+      } catch (caught) {
+        // A correct password on an unverified account sends the owner to the code screen instead of a dead end.
+        const pending = caught instanceof ApiError && caught.status === 403 ? caught.data as { status?: string; userId?: string; maskedEmail?: string } | null : null
+        if (pending?.status === 'EMAIL_VERIFICATION_REQUIRED' && pending.userId) {
+          setUserId(pending.userId)
+          setMaskedEmail(pending.maskedEmail ?? '')
+          setCooldown(0)
+          setMode('verify')
+          setMessage('Your email is not verified yet. Enter the code we sent you, or request a new one.')
+          return
+        }
+        throw caught
+      }
       if (!response.token) throw new Error('The server did not return a session token.')
       localStorage.setItem('sarismart_token', response.token)
       onAuthenticated(response.token)

@@ -2,14 +2,16 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "build": "tsc",
-    "test": "node --test --import tsx tests/**/*.test.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx \"tests/**/*.test.ts\"",
     "create-admin": "tsx src/scripts/createAdmin.ts",
-    "create-indexes": "tsx src/scripts/createIndexes.ts"
+    "create-indexes": "tsx src/scripts/createIndexes.ts",
+    "dev:memory": "tsx dev/memoryServer.ts"
   },
   "keywords": [],
   "author": "",
@@ -32,7 +34,11 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.4.0",
+    "mongodb-memory-server": "^11.3.0",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=20.19"
   }
 }

@@ -1,13 +1,28 @@
-import { handleAuthenticatedUnauthorized } from './apiSession'
-import { API_BASE_URL } from './apiBase'
+import { apiRequest } from './apiClient'
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('sarismart_token')
-  const response = await fetch(`${API_BASE_URL}/business${path}`, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers ?? {}) } })
-  handleAuthenticatedUnauthorized(response.status, Boolean(token))
-  const data = await response.json() as T & { message?: string }
-  if (!response.ok) throw new Error(data.message ?? 'Unable to load business data.')
-  return data
+function request<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+  return apiRequest<T>(`/business${path}`, {
+    ...(options.method ? { method: options.method } : {}),
+    ...(options.body !== undefined ? { body: options.body } : {}),
+    fallbackMessage: 'Unable to load business data.',
+  })
+}
+
+type Page = { pagination: { page: number; limit: number; total: number } }
+
+/** The API caps pages at 100 rows; keep fetching so stores with larger catalogs are not silently truncated. */
+async function fetchEveryPage<T extends Page>(load: (page: number) => Promise<T>, rows: (page: T) => unknown[]): Promise<T> {
+  const first = await load(1)
+  let loaded = rows(first).length
+  const merged = first
+  for (let page = 2; loaded < first.pagination.total && page <= 100; page += 1) {
+    const next = await load(page)
+    const nextRows = rows(next)
+    if (!nextRows.length) break
+    rows(merged).push(...nextRows)
+    loaded += nextRows.length
+  }
+  return merged
 }
 
 export type Sale = { transactionCode: string; total: number; estimatedProfit: number; paymentMethod: string; createdAt: string; items: Array<{ productName: string; quantity: number; lineTotal: number }> }
@@ -19,21 +34,21 @@ export type Alert = { id: string; severity: string; title: string; message: stri
 export type Settings = { firstName: string; lastName: string; email: string; mobileNumber: string; storeName: string; storeAddress: string }
 
 export const businessApi = {
-  sales: () => request<{ sales: Sale[] }>('/sales'),
+  sales: () => fetchEveryPage((page) => request<{ sales: Sale[] } & Page>(`/sales?page=${page}&limit=100`), (result) => result.sales),
   reports: () => request<Report>('/reports/sales'),
-  customers: () => request<{ customers: Customer[] }>('/customers'),
-  addCustomer: (payload: Record<string, unknown>) => request<{ customer: Customer }>('/customers', { method: 'POST', body: JSON.stringify(payload) }),
-  updateCustomer: (id: string, payload: Record<string, unknown>) => request<{ customer: Customer }>(`/customers/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  customers: () => fetchEveryPage((page) => request<{ customers: Customer[] } & Page>(`/customers?page=${page}&limit=100`), (result) => result.customers),
+  addCustomer: (payload: Record<string, unknown>) => request<{ customer: Customer }>('/customers', { method: 'POST', body: payload }),
+  updateCustomer: (id: string, payload: Record<string, unknown>) => request<{ customer: Customer }>(`/customers/${id}`, { method: 'PATCH', body: payload }),
   deleteCustomer: (id: string) => request<{ message: string }>(`/customers/${id}`, { method: 'DELETE' }),
-  suppliers: () => request<{ suppliers: Supplier[] }>('/suppliers'),
-  addSupplier: (payload: Record<string, unknown>) => request<{ supplier: Supplier }>('/suppliers', { method: 'POST', body: JSON.stringify(payload) }),
-  updateSupplier: (id: string, payload: Record<string, unknown>) => request<{ supplier: Supplier }>(`/suppliers/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  suppliers: () => fetchEveryPage((page) => request<{ suppliers: Supplier[] } & Page>(`/suppliers?page=${page}&limit=100`), (result) => result.suppliers),
+  addSupplier: (payload: Record<string, unknown>) => request<{ supplier: Supplier }>('/suppliers', { method: 'POST', body: payload }),
+  updateSupplier: (id: string, payload: Record<string, unknown>) => request<{ supplier: Supplier }>(`/suppliers/${id}`, { method: 'PATCH', body: payload }),
   deleteSupplier: (id: string) => request<{ message: string }>(`/suppliers/${id}`, { method: 'DELETE' }),
-  expenses: () => request<{ expenses: Expense[] }>('/expenses'),
-  addExpense: (payload: Record<string, unknown>) => request<{ expense: Expense }>('/expenses', { method: 'POST', body: JSON.stringify(payload) }),
-  updateExpense: (id: string, payload: Record<string, unknown>) => request<{ expense: Expense }>(`/expenses/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  expenses: () => fetchEveryPage((page) => request<{ expenses: Expense[] } & Page>(`/expenses?page=${page}&limit=100`), (result) => result.expenses),
+  addExpense: (payload: Record<string, unknown>) => request<{ expense: Expense }>('/expenses', { method: 'POST', body: payload }),
+  updateExpense: (id: string, payload: Record<string, unknown>) => request<{ expense: Expense }>(`/expenses/${id}`, { method: 'PATCH', body: payload }),
   deleteExpense: (id: string) => request<{ message: string }>(`/expenses/${id}`, { method: 'DELETE' }),
   alerts: () => request<{ alerts: Alert[] }>('/alerts'),
   settings: () => request<{ settings: Settings }>('/settings'),
-  updateSettings: (payload: Partial<Settings>) => request<{ settings: Settings }>('/settings', { method: 'PATCH', body: JSON.stringify(payload) }),
+  updateSettings: (payload: Partial<Settings>) => request<{ settings: Settings }>('/settings', { method: 'PATCH', body: payload }),
 }

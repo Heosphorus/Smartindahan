@@ -11,6 +11,8 @@ import { recordAuditLog } from '../services/auditService.js'
 import { parsePagination } from '../utils/pagination.js'
 import { parseObjectId } from '../utils/objectId.js'
 import { pickRequestFields } from '../utils/requestFields.js'
+import { cleanText, isCount, isMoney } from '../utils/validation.js'
+import { STORE_TIMEZONE, startOfStoreDay, startOfStoreMonth, storeDateRange } from '../utils/storeTime.js'
 
 function storeIdFromRequest(req: AuthenticatedRequest): mongoose.Types.ObjectId | null {
   return parseObjectId(req.user?.storeId)
@@ -30,17 +32,11 @@ export async function getDashboardSummary(req: AuthenticatedRequest, res: Respon
   }
   const salesOverviewPeriod = requestedPeriod === 'monthly' ? 'monthly' : 'weekly'
   const now = new Date()
-  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const startOfToday = startOfStoreDay(now)
+  // Weekly is the rolling last seven store days (including today); monthly is the current store month to date.
   const startOfSalesOverview = salesOverviewPeriod === 'monthly'
-    ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-    : new Date(startOfToday)
-  if (salesOverviewPeriod === 'weekly') {
-    const daysSinceMonday = (startOfSalesOverview.getUTCDay() + 6) % 7
-    startOfSalesOverview.setUTCDate(startOfSalesOverview.getUTCDate() - daysSinceMonday)
-  }
-  const salesOverviewDays = salesOverviewPeriod === 'weekly'
-    ? 5
-    : Math.floor((startOfToday.getTime() - startOfSalesOverview.getTime()) / 86400000) + 1
+    ? startOfStoreMonth(now)
+    : new Date(startOfToday.getTime() - 6 * 86400000)
 
   const [today, overviewSales, topSelling, lowStock, recentTransactions, inventoryValue, customerTotals, user] = await Promise.all([
     SaleModel.aggregate([
@@ -50,7 +46,7 @@ export async function getDashboardSummary(req: AuthenticatedRequest, res: Respon
     SaleModel.aggregate([
       { $match: { storeId, createdAt: { $gte: startOfSalesOverview } } },
       { $unwind: '$items' },
-      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, sales: { $sum: '$items.lineTotal' } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: STORE_TIMEZONE } }, sales: { $sum: '$items.lineTotal' } } },
       { $sort: { _id: 1 } },
     ]),
     SaleModel.aggregate([
@@ -68,12 +64,7 @@ export async function getDashboardSummary(req: AuthenticatedRequest, res: Respon
   ])
 
   const dayMap = new Map<string, number>(overviewSales.map((entry) => [entry._id as string, entry.sales as number]))
-  const salesOverview = Array.from({ length: salesOverviewDays }, (_, index) => {
-    const date = new Date(startOfSalesOverview)
-    date.setUTCDate(startOfSalesOverview.getUTCDate() + index)
-    const key = date.toISOString().slice(0, 10)
-    return { date: key, sales: dayMap.get(key) ?? 0 }
-  })
+  const salesOverview = storeDateRange(startOfSalesOverview, now).map((date) => ({ date, sales: dayMap.get(date) ?? 0 }))
 
   res.json({
     store: { id: storeId.toString(), name: user?.storeName ?? 'Your Store' },
@@ -108,25 +99,29 @@ export async function getProducts(req: AuthenticatedRequest, res: Response): Pro
 export async function createProduct(req: AuthenticatedRequest, res: Response): Promise<void> {
   const storeId = storeIdFromRequest(req)
   if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
-  const payload = req.body as { name?: string; barcode?: string; sku?: string; category?: string; brand?: string; supplier?: string; costPrice?: number; sellingPrice?: number; initialStock?: number; minStock?: number; unit?: string }
-  if (!payload.name?.trim() || !payload.category?.trim() || typeof payload.costPrice !== 'number' || typeof payload.sellingPrice !== 'number') {
-    res.status(400).json({ message: 'Name, category, prices, and initial stock are required.' })
-    return
+  const payload = (req.body ?? {}) as { name?: unknown; barcode?: unknown; sku?: unknown; category?: unknown; brand?: unknown; supplier?: unknown; costPrice?: unknown; sellingPrice?: unknown; initialStock?: unknown; minStock?: unknown; unit?: unknown }
+  const name = cleanText(payload.name)
+  const category = cleanText(payload.category)
+  if (!name || !category) { res.status(400).json({ message: 'Product name and category are required.' }); return }
+  if (!isMoney(payload.costPrice) || !isMoney(payload.sellingPrice)) { res.status(400).json({ message: 'Cost price and selling price must be valid amounts of zero or more.' }); return }
+  if ((payload.initialStock !== undefined && !isCount(payload.initialStock)) || (payload.minStock !== undefined && !isCount(payload.minStock))) { res.status(400).json({ message: 'Stock quantities must be whole numbers of zero or more.' }); return }
+  for (const optional of [payload.barcode, payload.sku, payload.brand, payload.supplier, payload.unit]) {
+    if (optional !== undefined && optional !== '' && cleanText(optional) === null) { res.status(400).json({ message: 'Barcode, SKU, brand, supplier and unit must be text of 64 characters or fewer.' }); return }
   }
   const productData: Record<string, unknown> = {
     storeId,
-    name: payload.name.trim(),
-    category: payload.category.trim(),
+    name,
+    category,
     costPrice: payload.costPrice,
     sellingPrice: payload.sellingPrice,
     currentStock: payload.initialStock ?? 0,
     minStock: payload.minStock ?? 0,
-    unit: payload.unit ?? 'piece',
+    unit: cleanText(payload.unit) ?? 'piece',
   }
-  if (payload.barcode?.trim()) productData.barcode = payload.barcode.trim()
-  if (payload.sku?.trim()) productData.sku = payload.sku.trim()
-  if (payload.brand?.trim()) productData.brand = payload.brand.trim()
-  if (payload.supplier?.trim()) productData.supplier = payload.supplier.trim()
+  for (const field of ['barcode', 'sku', 'brand', 'supplier'] as const) {
+    const value = cleanText(payload[field])
+    if (value) productData[field] = value
+  }
   const session = await mongoose.startSession()
   let product: Awaited<ReturnType<typeof ProductModel.create>>[number] | undefined
   try {
@@ -163,10 +158,13 @@ export async function createProduct(req: AuthenticatedRequest, res: Response): P
 export async function bulkCreateProducts(req: AuthenticatedRequest, res: Response): Promise<void> {
   const storeId = storeIdFromRequest(req)
   if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
-  const payload = req.body as { names?: string[]; category?: string; unit?: string }
-  const names = Array.from(new Set((payload.names ?? []).map((name) => name.trim()).filter(Boolean)))
-  if (!names.length || !payload.category?.trim()) { res.status(400).json({ message: 'Product names and category are required.' }); return }
-  const products = await ProductModel.insertMany(names.map((name) => ({ storeId, name, category: payload.category!.trim(), costPrice: 0, sellingPrice: 0, currentStock: 0, minStock: 0, unit: payload.unit?.trim() || 'piece' })))
+  const payload = (req.body ?? {}) as { names?: unknown; category?: unknown; unit?: unknown }
+  const names = Array.isArray(payload.names) ? Array.from(new Set(payload.names.map((name) => cleanText(name)).filter((name): name is string => name !== null))) : []
+  const category = cleanText(payload.category)
+  if (!names.length || !category) { res.status(400).json({ message: 'Product names and category are required.' }); return }
+  if (names.length > 200) { res.status(400).json({ message: 'Add at most 200 products at a time.' }); return }
+  const unit = cleanText(payload.unit) ?? 'piece'
+  const products = await ProductModel.insertMany(names.map((name) => ({ storeId, name, category, costPrice: 0, sellingPrice: 0, currentStock: 0, minStock: 0, unit })))
   res.status(201).json({ message: `${products.length} products added.`, products })
 }
 
@@ -177,7 +175,19 @@ export async function updateProduct(req: AuthenticatedRequest, res: Response): P
   if (!productId) { res.status(404).json({ message: 'Product not found.' }); return }
   const updates = pickRequestFields(['name', 'barcode', 'sku', 'category', 'brand', 'supplier', 'costPrice', 'sellingPrice', 'minStock', 'unit'], req.body)
   if (!Object.keys(updates).length) { res.status(400).json({ message: 'No editable product fields were provided.' }); return }
-  const product = await ProductModel.findOneAndUpdate({ _id: productId, storeId }, { $set: updates }, { new: true, runValidators: true }).lean()
+  if (('costPrice' in updates && !isMoney(updates.costPrice)) || ('sellingPrice' in updates && !isMoney(updates.sellingPrice))) { res.status(400).json({ message: 'Prices must be valid amounts of zero or more.' }); return }
+  if ('minStock' in updates && !isCount(updates.minStock)) { res.status(400).json({ message: 'Minimum stock must be a whole number of zero or more.' }); return }
+  for (const field of ['name', 'category', 'barcode', 'sku', 'brand', 'supplier', 'unit']) {
+    if (field in updates && cleanText(updates[field]) === null && !(field !== 'name' && field !== 'category' && updates[field] === '')) { res.status(400).json({ message: 'Text fields must be 64 characters or fewer, and name and category cannot be blank.' }); return }
+  }
+  // A cleared optional field is removed rather than stored as '', so the unique barcode index never sees blanks.
+  const changes: Record<string, unknown> = {}
+  const removals: Record<string, ''> = {}
+  for (const [field, value] of Object.entries(updates)) {
+    if (value === '' && !['name', 'category'].includes(field)) removals[field] = ''
+    else changes[field] = typeof value === 'string' ? value.trim() : value
+  }
+  const product = await ProductModel.findOneAndUpdate({ _id: productId, storeId, status: 'active' }, { ...(Object.keys(changes).length ? { $set: changes } : {}), ...(Object.keys(removals).length ? { $unset: removals } : {}) }, { returnDocument: 'after', runValidators: true }).lean()
   if (!product) { res.status(404).json({ message: 'Product not found.' }); return }
   await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'PRODUCT_UPDATED', resourceType: 'Product', resourceId: product._id })
   res.json({ product })
@@ -188,7 +198,7 @@ export async function deleteProduct(req: AuthenticatedRequest, res: Response): P
   if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
   const productId = parseObjectId(req.params.id)
   if (!productId) { res.status(404).json({ message: 'Product not found.' }); return }
-  const product = await ProductModel.findOneAndUpdate({ _id: productId, storeId, status: 'active' }, { $set: { status: 'archived' } }, { new: true, runValidators: true }).lean()
+  const product = await ProductModel.findOneAndUpdate({ _id: productId, storeId, status: 'active' }, { $set: { status: 'archived' } }, { returnDocument: 'after', runValidators: true }).lean()
   if (!product) { res.status(404).json({ message: 'Product not found.' }); return }
   await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'PRODUCT_ARCHIVED', resourceType: 'Product', resourceId: product._id })
   res.json({ message: 'Product archived from price list.' })

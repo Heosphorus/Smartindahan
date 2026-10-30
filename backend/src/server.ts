@@ -3,8 +3,8 @@ import express from 'express'
 import { pathToFileURL } from 'node:url'
 import mongoose from 'mongoose'
 
-import { connectDatabase } from './config/database.js'
-import { env, validateEnvironment } from './config/env.js'
+import { connectDatabase, databaseStatus, ensureDatabaseConnection } from './config/database.js'
+import { allowedFrontendOrigins, env, validateEnvironment } from './config/env.js'
 import authRoutes from './routes/authRoutes.js'
 import storeRoutes from './routes/storeRoutes.js'
 import businessRoutes from './routes/businessRoutes.js'
@@ -13,17 +13,17 @@ import adminRoutes from './routes/adminRoutes.js'
 export const app = express()
 
 app.disable('x-powered-by')
+// Vercel (and most hosts) terminate TLS in a proxy; without this every client shares the proxy's IP,
+// which would make the per-IP rate limits apply to all users at once.
+if (env.nodeEnv === 'production') app.set('trust proxy', 1)
 
 const developmentOrigins = env.nodeEnv === 'production' ? [] : ['http://localhost:5173', 'http://localhost:5174']
 
 app.use(cors({
   origin: (origin, callback) => {
-    const allowedOrigins = [env.frontendUrl, ...developmentOrigins]
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true)
-      return
-    }
-    callback(new Error('Origin is not allowed by CORS'))
+    const allowedOrigins = [...allowedFrontendOrigins(), ...developmentOrigins]
+    // Disallowed origins simply receive no CORS headers, so the browser blocks the response.
+    callback(null, !origin || allowedOrigins.includes(origin))
   },
   credentials: true,
 }))
@@ -60,13 +60,30 @@ app.use((_, res, next) => {
   next()
 })
 
+function healthReport(_: express.Request, res: express.Response): void {
+  const database = databaseStatus()
+  res.status(database === 'connected' ? 200 : 503).json({ status: database === 'connected' ? 'ok' : 'degraded', database })
+}
+app.get('/health', healthReport)
+app.get('/api/health', healthReport)
+
+// Serverless instances connect lazily; the long-running server connects before it starts listening.
+app.use('/api', (req, res, next) => {
+  if (req.method === 'OPTIONS') { next(); return }
+  ensureDatabaseConnection().then(() => next(), (error: unknown) => {
+    console.error('Database unavailable:', error instanceof Error ? error.message : 'Unknown error')
+    res.status(503).json({ message: 'The service is temporarily unavailable. Please try again shortly.' })
+  })
+})
+
 app.use('/api/auth', authRoutes)
 app.use('/api/store', storeRoutes)
 app.use('/api/business', businessRoutes)
 app.use('/api/auth/admin', adminRoutes)
 
-app.get('/health', (_, res) => {
-  res.json({ status: 'ok' })
+// Unknown API paths must answer in JSON, never with an HTML page the client cannot parse.
+app.use('/api', (_req, res) => {
+  res.status(404).json({ message: 'API route not found.' })
 })
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

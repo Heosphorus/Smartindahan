@@ -44,7 +44,7 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-    "rootDir": ".",
-    "outDir": "./dist"
-  }
+    "noEmit": true
+  },
+  "include": ["src", "tests", "dev"]
 }

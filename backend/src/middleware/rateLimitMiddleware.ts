@@ -2,10 +2,18 @@ import type { NextFunction, Request, Response } from 'express'
 
 const attempts = new Map<string, { count: number; firstRequestAt: number }>()
 
+// Counters live in this process only, so on serverless hosts each warm instance keeps its own window.
+// Expired entries are dropped opportunistically so the map cannot grow without bound.
+function pruneExpired(now: number, windowMs: number): void {
+  if (attempts.size < 5000) return
+  for (const [key, entry] of attempts) if (now - entry.firstRequestAt > windowMs) attempts.delete(key)
+}
+
 export function rateLimit(maxRequests: number, windowMs: number, keyBuilder?: (req: Request) => string) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const key = keyBuilder ? keyBuilder(req) : req.ip ?? 'global'
     const now = Date.now()
+    pruneExpired(now, windowMs)
     const current = attempts.get(key)
 
     if (!current) {

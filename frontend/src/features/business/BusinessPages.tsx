@@ -544,6 +544,8 @@ export function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [savingSection, setSavingSection] = useState<'owner' | 'store' | 'password' | null>(null)
   const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', mobileNumber: '', storeName: '', storeAddress: '' })
   const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
   const [themePreferences, setThemePreferences] = useState(getThemePreferences)
@@ -564,8 +566,11 @@ export function SettingsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleUpdateSettings = async (e: React.FormEvent, fields: Partial<Settings>) => {
+  const handleUpdateSettings = async (e: React.FormEvent, fields: Partial<Settings>, section: 'owner' | 'store') => {
     e.preventDefault()
+    if (savingSection) return
+    setSavingSection(section)
+    setNotice('')
     try {
       const result = await businessApi.updateSettings(fields)
       setSettings(result.settings)
@@ -581,13 +586,17 @@ export function SettingsPage() {
         window.dispatchEvent(new CustomEvent('smarTindahan:store-profile-updated', { detail: { storeName: result.settings.storeName } }))
       }
       setError('')
+      setNotice(section === 'owner' ? 'Owner profile saved.' : 'Store profile saved.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update settings')
+    } finally {
+      setSavingSection(null)
     }
   }
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (savingSection) return
     const token = localStorage.getItem('sarismart_token')
     if (!token) {
       setError('You must be logged in to change your password')
@@ -597,13 +606,20 @@ export function SettingsPage() {
       setError('New password and confirm password do not match')
       return
     }
+    setSavingSection('password')
+    setNotice('')
     try {
-      await authApi.changePassword(token, passwordData.currentPassword, passwordData.newPassword, passwordData.confirmPassword)
+      const response = await authApi.changePassword(token, passwordData.currentPassword, passwordData.newPassword, passwordData.confirmPassword)
+      // Changing the password signs out other devices; keep this one signed in with the fresh token.
+      if (response.token) localStorage.setItem('sarismart_token', response.token)
       setShowPasswordForm(false)
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
       setError('')
+      setNotice('Password changed. Other devices have been signed out.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to change password')
+    } finally {
+      setSavingSection(null)
     }
   }
 
@@ -626,7 +642,8 @@ export function SettingsPage() {
         )}
       </div>
 
-      {error && <div className="dashboard-error">{error}</div>}
+      {error && <div className="dashboard-error" role="alert">{error}</div>}
+      {notice && <div className="dashboard-notice" role="status">{notice}</div>}
 
       <section className="settings-section appearance-section" aria-labelledby="appearance-heading">
         <div className="settings-section-heading">
@@ -692,24 +709,24 @@ export function SettingsPage() {
             <div className="settings-editor settings-always-editable">
               <section className="settings-section">
                 <div className="settings-section-heading"><div><h3>Owner profile</h3><p>Update the details associated with your account.</p></div></div>
-                <form onSubmit={(event) => handleUpdateSettings(event, { firstName: formData.firstName, lastName: formData.lastName, mobileNumber: formData.mobileNumber })}>
+                <form onSubmit={(event) => handleUpdateSettings(event, { firstName: formData.firstName, lastName: formData.lastName, mobileNumber: formData.mobileNumber }, 'owner')}>
                   <div className="settings-fields">
                     <label>First name<input placeholder="First name" value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} required /></label>
                     <label>Last name<input placeholder="Last name" value={formData.lastName} onChange={e => setFormData({ ...formData, lastName: e.target.value })} required /></label>
                     <label>Account email<input type="email" value={settings.email} readOnly aria-describedby="account-email-note" /><small id="account-email-note">Email changes are managed separately to protect account access.</small></label>
                     <label>Contact number<input placeholder="Contact number" value={formData.mobileNumber} onChange={e => setFormData({ ...formData, mobileNumber: e.target.value })} required /></label>
                   </div>
-                  <div className="form-actions"><button type="submit" className="btn-primary">Save owner profile</button></div>
+                  <div className="form-actions"><button type="submit" className="btn-primary" disabled={savingSection !== null}>{savingSection === 'owner' ? 'Saving…' : 'Save owner profile'}</button></div>
                 </form>
               </section>
               <section className="settings-section">
                 <div className="settings-section-heading"><div><h3>Store profile</h3><p>Update how your business is identified.</p></div></div>
-                <form onSubmit={(event) => handleUpdateSettings(event, { storeName: formData.storeName, storeAddress: formData.storeAddress })}>
+                <form onSubmit={(event) => handleUpdateSettings(event, { storeName: formData.storeName, storeAddress: formData.storeAddress }, 'store')}>
                   <div className="settings-fields">
                     <label>Store name<input placeholder="Store name" value={formData.storeName} onChange={e => setFormData({ ...formData, storeName: e.target.value })} required /></label>
                     <label>Store address<input placeholder="Store address" value={formData.storeAddress} onChange={e => setFormData({ ...formData, storeAddress: e.target.value })} required /></label>
                   </div>
-                  <div className="form-actions"><button type="submit" className="btn-primary">Save store profile</button></div>
+                  <div className="form-actions"><button type="submit" className="btn-primary" disabled={savingSection !== null}>{savingSection === 'store' ? 'Saving…' : 'Save store profile'}</button></div>
                 </form>
               </section>
             </div>
@@ -719,13 +736,13 @@ export function SettingsPage() {
               <section className="settings-section">
                 <div className="settings-section-heading"><div><h3>Change password</h3><p>Choose a new password to secure your account.</p></div></div>
                 <div className="settings-fields password-fields">
-                  <label>Current password<input type="password" placeholder="Current password" value={passwordData.currentPassword} onChange={e => setPasswordData({ ...passwordData, currentPassword: e.target.value })} required /></label>
-                  <label>New password<input type="password" placeholder="New password" value={passwordData.newPassword} onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })} required /></label>
-                  <label>Confirm new password<input type="password" placeholder="Confirm new password" value={passwordData.confirmPassword} onChange={e => setPasswordData({ ...passwordData, confirmPassword: e.target.value })} required /></label>
+                  <label>Current password<input type="password" autoComplete="current-password" placeholder="Current password" value={passwordData.currentPassword} onChange={e => setPasswordData({ ...passwordData, currentPassword: e.target.value })} required /></label>
+                  <label>New password<input type="password" autoComplete="new-password" minLength={8} placeholder="8+ characters with upper, lower and a number" value={passwordData.newPassword} onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })} required /></label>
+                  <label>Confirm new password<input type="password" autoComplete="new-password" placeholder="Confirm new password" value={passwordData.confirmPassword} onChange={e => setPasswordData({ ...passwordData, confirmPassword: e.target.value })} required /></label>
                 </div>
               </section>
               <div className="form-actions">
-                <button type="submit" className="btn-primary">Change Password</button>
+                <button type="submit" className="btn-primary" disabled={savingSection !== null}>{savingSection === 'password' ? 'Changing…' : 'Change Password'}</button>
                 <button type="button" onClick={() => { setShowPasswordForm(false); setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' }) }} className="btn-secondary">Cancel</button>
               </div>
             </form>

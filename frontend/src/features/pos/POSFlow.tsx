@@ -22,12 +22,18 @@ export function POSFlow() {
   const [publicLookupStatus, setPublicLookupStatus] = useState('')
   const [newProductForm, setNewProductForm] = useState<NewProductForm>(emptyNewProduct(''))
   const [isCreatingProduct, setIsCreatingProduct] = useState(false)
+  const [isCheckingOut, setIsCheckingOut] = useState(false)
+  // One key per cart attempt: a retry or double-click re-sends the same key, so the server records the sale once.
+  const checkoutKeyRef = useRef<string | null>(null)
   const closeUnknownProduct = useCallback(() => setUnknownBarcode(''), [])
   useEscapeKey(Boolean(unknownBarcode) && !cameraOpen, closeUnknownProduct)
   const lastScanRef = useRef({ value: '', time: 0 })
 
+  // A changed cart is a different sale, so it must not reuse the previous attempt's key.
+  useEffect(() => { checkoutKeyRef.current = null }, [cart])
+
   useEffect(() => {
-    storeApi.products().then((response) => setProducts(response.products)).catch((error: unknown) => setStatus(error instanceof Error ? error.message : 'Unable to load products'))
+    storeApi.allProducts().then((allProducts) => setProducts(allProducts)).catch((error: unknown) => setStatus(error instanceof Error ? error.message : 'Unable to load products'))
   }, [])
 
   const addToCart = useCallback((product: ProductRecord, quantity = 1) => {
@@ -139,12 +145,20 @@ export function POSFlow() {
   }, [handleScan])
 
   const completeCheckout = async () => {
+    if (isCheckingOut || !cart.length) return
+    setIsCheckingOut(true)
+    checkoutKeyRef.current ??= crypto.randomUUID()
     try {
-      const response = await storeApi.checkout(cart.map((item) => ({ productId: item.productId, quantity: item.quantity })))
+      const response = await storeApi.checkout(cart.map((item) => ({ productId: item.productId, quantity: item.quantity })), 'Cash', checkoutKeyRef.current)
+      checkoutKeyRef.current = null
       setCart([])
       setStatus(`Checkout complete: ${response.sale.code}`)
+      // Stock changed on the server; reload so the catalog does not show stale quantities.
+      storeApi.allProducts().then(setProducts).catch(() => undefined)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Checkout failed')
+    } finally {
+      setIsCheckingOut(false)
     }
   }
 
@@ -215,7 +229,7 @@ export function POSFlow() {
         <button style={styles.secondaryButton} onClick={() => setStatus(products.length ? `${products.length} products available for scanning` : 'No products registered yet')}>
           View products
         </button>
-        <button style={styles.primaryButton} onClick={() => void completeCheckout()} disabled={!cart.length}>Complete Checkout</button>
+        <button style={styles.primaryButton} onClick={() => void completeCheckout()} disabled={!cart.length || isCheckingOut} aria-busy={isCheckingOut}>{isCheckingOut ? 'Processing…' : 'Complete Checkout'}</button>
       </div>
     </div>
     {cameraOpen && <BarcodeCameraScanner onDetected={handleCameraDetected} onClose={() => setCameraOpen(false)} />}

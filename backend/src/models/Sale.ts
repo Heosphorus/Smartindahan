@@ -19,8 +19,11 @@ const saleSchema = new Schema({
   estimatedProfit: { type: Number, required: true },
   paymentMethod: { type: String, enum: ['Cash', 'Maya', 'GCash', 'Utang'], default: 'Cash' },
   customerName: { type: String, trim: true },
+  idempotencyKey: { type: String },
 }, { timestamps: true })
 
 saleSchema.index({ storeId: 1, createdAt: -1 })
+// A client retry or double-click carries the same key, so it can never record the sale twice.
+saleSchema.index({ storeId: 1, idempotencyKey: 1 }, { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } })
 export type SaleDocument = InferSchemaType<typeof saleSchema>
 export const SaleModel = model('Sale', saleSchema)

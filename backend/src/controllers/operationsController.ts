@@ -8,6 +8,7 @@ import { ProductModel } from '../models/Product.js'
 import { SaleModel } from '../models/Sale.js'
 import { recordAuditLog } from '../services/auditService.js'
 import { parseObjectId } from '../utils/objectId.js'
+import { isIdempotencyKey, roundMoney } from '../utils/validation.js'
 
 class OperationError extends Error {
   constructor(message: string, readonly statusCode = 400) {
@@ -28,20 +29,40 @@ export async function lookupProduct(req: AuthenticatedRequest, res: Response): P
   if (!rawValue) { res.status(400).json({ message: 'Barcode is required.' }); return }
   const product = await ProductModel.findOne({ storeId, $or: [{ barcode: rawValue }, { sku: rawValue }] }).lean()
   if (!product) { res.status(404).json({ found: false, message: 'Barcode not registered.' }); return }
-  res.json({ found: true, product: { id: product._id, name: product.name, barcode: product.barcode, currentStock: product.currentStock, sellPrice: product.sellingPrice, costPrice: product.costPrice } })
+  // `sellPrice` is the documented contract name; `sellingPrice` matches the product records the POS screen uses.
+  res.json({ found: true, product: { id: product._id, name: product.name, barcode: product.barcode, currentStock: product.currentStock, sellPrice: product.sellingPrice, sellingPrice: product.sellingPrice, costPrice: product.costPrice } })
+}
+
+type CheckoutResult = { code: string; total: number; profit: number }
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 11000)
+}
+
+async function findSaleByIdempotencyKey(storeId: mongoose.Types.ObjectId, key: string): Promise<CheckoutResult | null> {
+  const existing = await SaleModel.findOne({ storeId, idempotencyKey: key }).lean()
+  return existing ? { code: existing.transactionCode, total: existing.total, profit: existing.estimatedProfit } : null
 }
 
 export async function checkout(req: AuthenticatedRequest, res: Response): Promise<void> {
   const storeId = currentStore(req)
   if (!storeId) { failSession(res); return }
-  const payload = req.body as { items?: Array<{ productId?: string; quantity?: number }>; paymentMethod?: string; customerName?: string }
-  if (!payload.items?.length) { res.status(400).json({ message: 'Cart cannot be empty.' }); return }
-  if (payload.paymentMethod !== undefined && !['Cash', 'Maya', 'GCash', 'Utang'].includes(payload.paymentMethod)) { res.status(400).json({ message: 'Unsupported payment method.' }); return }
+  const payload = (req.body ?? {}) as { items?: Array<{ productId?: string; quantity?: number }>; paymentMethod?: string; customerName?: string; idempotencyKey?: unknown }
+  if (!Array.isArray(payload.items) || !payload.items.length || payload.items.length > 200) { res.status(400).json({ message: 'Cart cannot be empty.' }); return }
+  if (payload.paymentMethod === 'Utang') { res.status(400).json({ message: 'Credit (utang) sales are not supported yet.' }); return }
+  if (payload.paymentMethod !== undefined && !['Cash', 'Maya', 'GCash'].includes(payload.paymentMethod)) { res.status(400).json({ message: 'Unsupported payment method.' }); return }
   if (payload.customerName !== undefined && (typeof payload.customerName !== 'string' || payload.customerName.length > 160)) { res.status(400).json({ message: 'Customer name is invalid.' }); return }
+  if (payload.idempotencyKey !== undefined && !isIdempotencyKey(payload.idempotencyKey)) { res.status(400).json({ message: 'Idempotency key is invalid.' }); return }
+  const idempotencyKey = payload.idempotencyKey
+
+  if (idempotencyKey) {
+    const replay = await findSaleByIdempotencyKey(storeId, idempotencyKey)
+    if (replay) { res.status(200).json({ message: 'Checkout already completed.', sale: replay }); return }
+  }
 
   const session = await mongoose.startSession()
   try {
-    let result: { code: string; total: number; profit: number } | null = null
+    let result: CheckoutResult | null = null
     await session.withTransaction(async () => {
       const parsedIds = payload.items!.map((item) => parseObjectId(item.productId))
       if (parsedIds.some((id) => !id)) throw new OperationError('Cart contains an invalid product.')
@@ -59,9 +80,10 @@ export async function checkout(req: AuthenticatedRequest, res: Response): Promis
         if (!product || !Number.isSafeInteger(quantity) || quantity! < 1) throw new OperationError('Cart contains an invalid quantity or product.')
         const validQuantity = quantity!
         if (product.currentStock < validQuantity) throw new OperationError(`${product.name} has insufficient stock.`, 409)
-        const lineTotal = validQuantity * product.sellingPrice
-        total += lineTotal
-        profit += validQuantity * (product.sellingPrice - product.costPrice)
+        const lineTotal = roundMoney(validQuantity * product.sellingPrice)
+        total = roundMoney(total + lineTotal)
+        // Profit uses the cost recorded on the product at the moment of sale and is frozen on the sale item.
+        profit = roundMoney(profit + validQuantity * (product.sellingPrice - product.costPrice))
         const previousStock = product.currentStock
         product.currentStock -= validQuantity
         await product.save({ session })
@@ -72,6 +94,7 @@ export async function checkout(req: AuthenticatedRequest, res: Response): Promis
       const code = `TXN-${randomUUID()}`
       const sale: Record<string, unknown> = { storeId, cashierId: new mongoose.Types.ObjectId(req.user!.id), transactionCode: code, items: saleItems, subtotal: total, total, estimatedProfit: profit, paymentMethod: payload.paymentMethod ?? 'Cash' }
       if (payload.customerName) sale.customerName = payload.customerName
+      if (idempotencyKey) sale.idempotencyKey = idempotencyKey
       const [createdSale] = await SaleModel.create([sale], { session })
       if (!createdSale) throw new OperationError('Checkout could not be completed.', 500)
       await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'SALE_CREATED', resourceType: 'Sale', resourceId: createdSale._id, metadata: { transactionCode: code, total } }, session)
@@ -79,6 +102,11 @@ export async function checkout(req: AuthenticatedRequest, res: Response): Promis
     })
     res.status(201).json({ message: 'Checkout completed.', sale: result })
   } catch (error) {
+    // A concurrent request with the same key won the race; its transaction committed, ours rolled back.
+    if (idempotencyKey && isDuplicateKeyError(error)) {
+      const replay = await findSaleByIdempotencyKey(storeId, idempotencyKey)
+      if (replay) { res.status(200).json({ message: 'Checkout already completed.', sale: replay }); return }
+    }
     const expected = error instanceof OperationError
     res.status(expected ? error.statusCode : 500).json({ message: expected ? error.message : 'Checkout could not be completed.' })
   } finally {

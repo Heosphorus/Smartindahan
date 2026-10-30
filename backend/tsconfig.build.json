@@ -1,0 +1,10 @@
+{
+  // Production build: compile only src/ so that "node dist/server.js" and the Vercel entry point resolve.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "./src",
+    "outDir": "./dist"
+  },
+  "include": ["src"]
+}

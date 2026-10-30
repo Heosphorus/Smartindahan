@@ -93,7 +93,7 @@ export async function register(req: Request, res: Response): Promise<void> {
   const payload = req.body as RegisterPayload
   const required = [payload.firstName, payload.lastName, payload.email, payload.mobileNumber, payload.password, payload.confirmPassword, payload.storeName, payload.storeAddress]
 
-  if (required.some((value) => !value?.trim())) {
+  if (required.some((value) => typeof value !== 'string' || !value.trim())) {
     res.status(400).json({ message: 'All fields are required.' })
     return
   }
@@ -199,7 +199,7 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
     return
   }
 
-  const user = await UserModel.findByIdAndUpdate(targetUserId, { isEmailVerified: true }, { new: true })
+  const user = await UserModel.findByIdAndUpdate(targetUserId, { isEmailVerified: true }, { returnDocument: 'after' })
   if (!user) {
     res.status(404).json({ message: 'User not found.' })
     return
@@ -252,9 +252,9 @@ export async function login(req: Request, res: Response): Promise<void> {
     return
   }
 
-  const { email: inputEmail, password } = req.body as { email?: string; password?: string }
-  const email = inputEmail?.trim().toLowerCase()
-  if (!email || !password) {
+  const { email: inputEmail, password } = (req.body ?? {}) as { email?: unknown; password?: unknown }
+  const email = typeof inputEmail === 'string' ? inputEmail.trim().toLowerCase() : ''
+  if (!email || typeof password !== 'string' || !password) {
     res.status(400).json({ message: 'Email and password are required.' })
     return
   }
@@ -268,6 +268,11 @@ export async function login(req: Request, res: Response): Promise<void> {
   if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
     res.status(423).json({ message: 'Account temporarily locked. Please try again later.' })
     return
+  }
+  if (user.lockedUntil) {
+    // The lock has expired: start a fresh attempt window instead of re-locking on the very next typo.
+    user.failedLoginAttempts = 0
+    user.lockedUntil = null
   }
 
   const validPassword = await bcrypt.compare(password, user.passwordHash)
@@ -300,8 +305,8 @@ export async function logout(req: AuthenticatedRequest, res: Response): Promise<
 }
 
 export async function forgotPassword(req: Request, res: Response): Promise<void> {
-  const inputEmail = (req.body as { email?: string }).email
-  const email = inputEmail?.trim().toLowerCase()
+  const inputEmail = ((req.body ?? {}) as { email?: unknown }).email
+  const email = typeof inputEmail === 'string' ? inputEmail.trim().toLowerCase() : ''
   if (!email) {
     res.status(400).json({ message: 'Email is required.' })
     return
@@ -309,7 +314,8 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
 
   const user = await UserModel.findOne({ email })
   if (!user) {
-    res.status(200).json({ message: 'If an account exists, a reset code has been sent.' })
+    // Same response shape as a real account (random id, masked address) so this endpoint cannot be used to discover registered emails.
+    res.status(200).json({ message: 'If an account exists, a reset code has been sent.', userId: new mongoose.Types.ObjectId().toString(), maskedEmail: maskEmail(email) })
     return
   }
 
@@ -386,7 +392,7 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
     return
   }
 
-  const user = await UserModel.findByIdAndUpdate(targetUserId, { $set: { passwordHash: await bcrypt.hash(password, 12), failedLoginAttempts: 0, lockedUntil: undefined }, $inc: { tokenVersion: 1 } }, { new: true })
+  const user = await UserModel.findByIdAndUpdate(targetUserId, { $set: { passwordHash: await bcrypt.hash(password, 12), failedLoginAttempts: 0, lockedUntil: undefined }, $inc: { tokenVersion: 1 } }, { returnDocument: 'after' })
   if (!user) {
     res.status(404).json({ message: 'User not found.' })
     return
@@ -396,6 +402,46 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
   await reset.save()
   await audit(req, 'PASSWORD_CHANGED', user._id)
   res.status(200).json({ message: 'Your password has been successfully changed.' })
+}
+
+export async function changePassword(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = parseObjectId(req.user?.id)
+  if (!userId) {
+    res.status(401).json({ message: 'Invalid session.' })
+    return
+  }
+  const { currentPassword, newPassword, confirmPassword } = (req.body ?? {}) as { currentPassword?: unknown; newPassword?: unknown; confirmPassword?: unknown }
+  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' || typeof confirmPassword !== 'string' || !currentPassword || !newPassword) {
+    res.status(400).json({ message: 'Current password, new password and confirmation are required.' })
+    return
+  }
+  const passwordCheck = validatePasswordStrength(newPassword)
+  if (!passwordCheck.isValid) {
+    res.status(400).json({ message: passwordCheck.message })
+    return
+  }
+  if (newPassword !== confirmPassword) {
+    res.status(400).json({ message: 'Passwords do not match.' })
+    return
+  }
+  if (newPassword === currentPassword) {
+    res.status(400).json({ message: 'Choose a new password that is different from the current one.' })
+    return
+  }
+
+  const user = await UserModel.findById(userId).select('+passwordHash')
+  if (!user || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    await audit(req, 'LOGIN_FAILED', userId, { reason: 'change-password' })
+    res.status(400).json({ message: 'Your current password is incorrect.' })
+    return
+  }
+
+  user.passwordHash = await bcrypt.hash(newPassword, 12)
+  // Invalidates every other signed-in device; the response carries a fresh token for this one.
+  user.tokenVersion += 1
+  await user.save()
+  await audit(req, 'PASSWORD_CHANGED', user._id)
+  res.status(200).json({ message: 'Your password has been changed.', token: issueToken({ id: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion }) })
 }
 
 export async function getCurrentUser(req: AuthenticatedRequest, res: Response): Promise<void> {

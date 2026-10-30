@@ -69,7 +69,7 @@ export async function changeUserPassword(req: AuthenticatedRequest, res: Respons
 
     const passwordHash = await bcrypt.hash(newPassword, 10)
 
-    const user = await UserModel.findByIdAndUpdate(targetUserId, { $set: { passwordHash }, $inc: { tokenVersion: 1 } }, { new: true })
+    const user = await UserModel.findByIdAndUpdate(targetUserId, { $set: { passwordHash }, $inc: { tokenVersion: 1 } }, { returnDocument: 'after' })
     if (!user) { res.status(404).json({ message: 'User not found' }); return }
     if (req.user?.id) await AuditLogModel.create({ userId: new mongoose.Types.ObjectId(req.user.id), event: 'ADMIN_PASSWORD_CHANGED', metadata: { targetUserId: user._id.toString() } })
 
@@ -103,7 +103,7 @@ export async function changeUserEmail(req: AuthenticatedRequest, res: Response):
       return
     }
 
-    const user = await UserModel.findByIdAndUpdate(targetUserId, { $set: { email: normalizedEmail, isEmailVerified: false }, $inc: { tokenVersion: 1 } }, { new: true })
+    const user = await UserModel.findByIdAndUpdate(targetUserId, { $set: { email: normalizedEmail, isEmailVerified: false }, $inc: { tokenVersion: 1 } }, { returnDocument: 'after' })
     if (!user) { res.status(404).json({ message: 'User not found' }); return }
     if (req.user?.id) await AuditLogModel.create({ userId: new mongoose.Types.ObjectId(req.user.id), event: 'ADMIN_EMAIL_CHANGED', metadata: { targetUserId: user._id.toString() } })
 

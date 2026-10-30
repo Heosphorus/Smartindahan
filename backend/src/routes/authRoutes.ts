@@ -1,6 +1,7 @@
 import { Router, type Request } from 'express'
 
 import {
+  changePassword,
   forgotPassword,
   getCurrentUser,
   login,
@@ -24,6 +25,7 @@ router.post('/logout', authenticateToken, logout)
 router.post('/forgot-password', rateLimit(5, 15 * 60 * 1000, (req: Request) => `forgot:${req.ip ?? 'unknown'}`), forgotPassword)
 router.post('/verify-reset-otp', rateLimit(10, 15 * 60 * 1000, (req: Request) => `verify-reset:${req.ip ?? 'unknown'}`), verifyResetOtp)
 router.post('/reset-password', rateLimit(5, 15 * 60 * 1000, (req: Request) => `reset-password:${req.ip ?? 'unknown'}`), resetPassword)
+router.post('/change-password', authenticateToken, rateLimit(5, 15 * 60 * 1000, (req: Request) => `change-password:${req.ip ?? 'unknown'}`), changePassword)
 router.get('/me', authenticateToken, getCurrentUser)
 
 export default router

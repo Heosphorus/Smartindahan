@@ -1,27 +1,23 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "backend": {
-      "root": "backend",
-      "framework": "express"
-    },
-    "frontend": {
-      "root": "frontend",
-      "framework": "vite"
-    }
-  },
+  "framework": null,
+  "installCommand": "npm ci --prefix backend && npm ci --prefix frontend",
+  "buildCommand": "npm run build",
+  "outputDirectory": "frontend/dist",
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/health", "destination": "/api" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
     {
-      "source": "/api/(.*)",
-      "destination": {
-        "service": "backend"
-      }
-    },
-    {
-      "source": "/(.*)",
-      "destination": {
-        "service": "frontend"
-      }
+      "source": "/((?!api/).*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(self), microphone=(), geolocation=()" }
+      ]
     }
   ]
 }
