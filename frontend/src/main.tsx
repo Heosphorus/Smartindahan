@@ -10,6 +10,7 @@ import './appDesignSystem.css'
 import { applyThemePreferences, getThemePreferences } from './services/themePreferences'
 import InputLengthLimit from './components/InputLengthLimit'
 import App from './App.tsx'
+import './responsive.css'
 
 applyThemePreferences(getThemePreferences())
 

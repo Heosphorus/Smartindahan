@@ -147,7 +147,7 @@ The app uses `Authorization: Bearer` tokens kept in `localStorage`, not cookies,
 - Text inputs are limited to 64 characters (enforced in the UI and API).
 - Sessions are bearer tokens in `localStorage` (valid up to 7 days, revoked on password change/reset). An XSS bug would expose them; the app renders no raw HTML.
 - The app currently stores data in whatever database the connection string names. If `MONGODB_URI` has no database name in its path, MongoDB uses `test`. Existing data may live there; add a name only after migrating it.
-- Visual testing was done at phone and desktop widths in one browser; dark mode and tablet widths were only spot-checked.
+- Screen sizes: every page was checked for sideways overflow in one browser (Chromium) at 320, 375, 768, 1024, 1920 and 2560 px wide, plus a 667×375 landscape phone for dialogs. Real devices, other browsers (especially iOS Safari) and dark mode at every size were not tested. Layout adjustments live in `frontend/src/responsive.css`: content is capped at about 92 rem and the interface scales up on screens 1700 px wide and larger.
 
 ## Privacy and legal (draft, not launch-ready)
 

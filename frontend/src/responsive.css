@@ -1,0 +1,85 @@
+/*
+ * Screen-size adjustments. Loaded after every other stylesheet (see main.tsx) so these rules win without !important
+ * unless noted. Sizes are in rem, so they also follow the font-size choice in Settings.
+ */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Settings → font size, multiplied by a factor that grows on large monitors so the app is not tiny there. */
+  font-size: calc(var(--app-font-scale, 100%) * var(--screen-scale, 1));
+}
+
+@media (min-width: 1700px) { :root { --screen-scale: 1.0625; } }
+@media (min-width: 1920px) { :root { --screen-scale: 1.125; } }
+@media (min-width: 2400px) { :root { --screen-scale: 1.25; } }
+@media (min-width: 3200px) { :root { --screen-scale: 1.5; } }
+
+/* A flex child with wide content (a table with a minimum width) must scroll inside its own wrapper, not stretch the page. */
+.main-panel {
+  min-width: 0;
+}
+
+/* Keep lines of content readable on wide screens instead of stretching across the whole monitor. */
+.main-panel > * {
+  max-width: 92rem;
+  margin-inline: auto;
+}
+
+.sidebar {
+  flex-shrink: 0;
+}
+
+/* Desktop and tablet-landscape: keep the menu (and Logout) in view while a long page scrolls. */
+@media (min-width: 821px) {
+  .sidebar {
+    width: 15.625rem;
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    height: 100dvh;
+    overflow-y: auto;
+  }
+}
+
+/* Summary cards must be allowed to shrink below their content, and long values wrap instead of overflowing. */
+.report-cards > *,
+.business-summary > *,
+.kpi-grid > *,
+.price-summary-grid > *,
+.admin-stats-grid > * {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+@media (max-width: 480px) {
+  .report-cards,
+  .business-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Touch screens: links and table sort buttons that were about 22px tall are hard to hit with a thumb. */
+@media (max-width: 820px), (pointer: coarse) {
+  .app-legal-footer a {
+    display: inline-block;
+    padding: 11px 4px;
+  }
+
+  .price-sort-button {
+    min-height: 36px;
+  }
+}
+
+/*
+ * Phones zoom the whole page when a text field under 16px is focused, which is the "too zoomed in" effect after tapping a
+ * field. Keep fields at 16px or the chosen size, whichever is larger. !important is needed to beat per-form font sizes.
+ */
+@media (max-width: 820px), (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  select,
+  textarea {
+    font-size: max(16px, 1rem) !important;
+  }
+}
