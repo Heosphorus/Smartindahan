@@ -41,6 +41,7 @@ npm test --prefix frontend
 - `features/auth/AuthPage.test.tsx` – login/register behaviour, unverified-account flow.
 - `features/auth/AuthRegistration.test.tsx` – agreement box unchecked by default, links to both policies open in a new tab and are focusable, validation message and focus when unticked, exact versions sent, re-ask after a version mismatch, no registration when policies fail to load.
 - `features/legal/Legal.test.tsx` – policy page (draft notice, highlighted placeholders, section navigation, retry), review gate for changed Terms, non-blocking privacy notice, data download, deletion confirmation.
+- `features/business/BusinessPages.test.tsx` – create/edit dialogs: failed save shown inside the dialog with the typed text kept, a single submission while saving, success message; Reports empty states and tables.
 - `features/business/RestockSuggestions.test.tsx` – restock table order and wording, cover-days selector, empty state, error with retry.
 - `features/pos/POSFlow.test.tsx` – price display, single submission with one idempotency key, name search, stock-capped quantities, checkout failure keeps the cart.
 

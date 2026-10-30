@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { businessApi, type Customer, type Alert, type Expense, type Report, type Sale, type Settings, type Supplier } from '../../services/businessApi'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { authApi } from '../../services/authApi'
@@ -8,8 +8,28 @@ import { PrivacySettings } from '../legal/PrivacySettings'
 import { RestockSuggestions } from './RestockSuggestions'
 import './SettingsPage.css'
 import './ThemeSettings.css'
+import './BusinessUi.css'
 
 const formatPeso = (value: number) => `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+/** Runs one save at a time and keeps its error for the dialog that started it (not the page behind the dialog). */
+function useSubmitAction() {
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
+  const busy = useRef(false)
+  const run = async (action: () => Promise<void>, fallback: string) => {
+    if (busy.current) return
+    busy.current = true
+    setSaving(true)
+    setFormError('')
+    try { await action() } catch (err) { setFormError(err instanceof Error ? err.message : fallback) } finally { busy.current = false; setSaving(false) }
+  }
+  return { saving, formError, setFormError, run }
+}
+
+function LoadingBlock({ label }: { label: string }) {
+  return <div className="business-page"><p className="loading-block" role="status"><span className="spinner" aria-hidden="true" />{label}</p></div>
+}
 
 function DeleteConfirmationModal({ isOpen, onClose, onConfirm, itemName }: { isOpen: boolean; onClose: () => void; onConfirm: () => void; itemName: string }) {
   useEscapeKey(isOpen, onClose)
@@ -29,7 +49,7 @@ function DeleteConfirmationModal({ isOpen, onClose, onConfirm, itemName }: { isO
   )
 }
 
-function EntryFormModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function EntryFormModal({ title, onClose, error, children }: { title: string; onClose: () => void; error?: string; children: React.ReactNode }) {
   useEscapeKey(true, onClose)
   const eyebrow = title.toLowerCase().includes('customer') ? 'CUSTOMER DETAILS' : title.toLowerCase().includes('supplier') ? 'SUPPLIER DETAILS' : 'EXPENSE DETAILS'
   return (
@@ -39,7 +59,7 @@ function EntryFormModal({ title, onClose, children }: { title: string; onClose: 
           <div><p className="entry-form-eyebrow">{eyebrow}</p><h3>{title}</h3></div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close form">&times;</button>
         </header>
-        <div className="modal-body">{children}</div>
+        <div className="modal-body">{error && <p className="form-error" role="alert">{error}</p>}{children}</div>
       </section>
     </div>
   )
@@ -57,20 +77,21 @@ export function AlertsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="business-page"><p>Loading alerts...</p></div>
-
   return (
     <section className="business-page">
       <h2>Alerts</h2>
       <p>View and manage system alerts and notifications.</p>
 
-      {error && <div className="dashboard-error">{error}</div>}
+      {error && <div className="dashboard-error" role="alert">{error}</div>}
 
       <RestockSuggestions />
 
+      <h3 className="section-title">Stock alerts</h3>
       <div className="alert-list">
-        {alerts.length === 0 ? (
-          <div className="empty-state">No alerts.</div>
+        {loading ? (
+          <p className="loading-block" role="status"><span className="spinner" aria-hidden="true" />Loading alerts…</p>
+        ) : alerts.length === 0 ? (
+          <div className="empty-state">No alerts. Everything is stocked above its minimum.</div>
         ) : (
           alerts.map(alert => (
             <div key={alert.id} className={`alert-card alert-${alert.severity}`}>
@@ -96,6 +117,8 @@ export function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string | null }>({ isOpen: false, id: null })
   const [formData, setFormData] = useState({ name: '', mobileNumber: '', address: '', creditLimit: '' })
+  const [notice, setNotice] = useState('')
+  const action = useSubmitAction()
 
   useEffect(() => {
     businessApi.customers()
@@ -104,9 +127,10 @@ export function CustomersPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleAddCustomer = async (e: React.FormEvent) => {
+  const handleAddCustomer = (e: React.FormEvent) => {
     e.preventDefault()
-    try {
+    void action.run(async () => {
+      setError('')
       const result = await businessApi.addCustomer({
         name: formData.name,
         mobileNumber: formData.mobileNumber,
@@ -117,17 +141,18 @@ export function CustomersPage() {
       setShowAddForm(false)
       setEditingCustomer(null)
       setFormData({ name: '', mobileNumber: '', address: '', creditLimit: '' })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add customer')
-    }
+      setNotice('Customer added.')
+    }, 'Failed to add customer')
   }
 
   const handleEditCustomer = (customer: Customer) => {
     if (editingCustomer?._id === customer._id) {
+      action.setFormError('')
       setShowAddForm(true)
       return
     }
     setEditingCustomer(customer)
+    action.setFormError('')
     setShowAddForm(true)
     setFormData({
       name: customer.name,
@@ -137,10 +162,11 @@ export function CustomersPage() {
     })
   }
 
-  const handleUpdateCustomer = async (e: React.FormEvent) => {
+  const handleUpdateCustomer = (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingCustomer) return
-    try {
+    void action.run(async () => {
+      setError('')
       const result = await businessApi.updateCustomer(editingCustomer._id, {
         name: formData.name,
         mobileNumber: formData.mobileNumber,
@@ -151,9 +177,8 @@ export function CustomersPage() {
       setEditingCustomer(null)
       setShowAddForm(false)
       setFormData({ name: '', mobileNumber: '', address: '', creditLimit: '' })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update customer')
-    }
+      setNotice('Customer saved.')
+    }, 'Failed to update customer')
   }
 
   const handleDeleteCustomer = async (id: string) => {
@@ -166,32 +191,36 @@ export function CustomersPage() {
       await businessApi.deleteCustomer(deleteModal.id)
       setCustomers(customers.filter(c => c._id !== deleteModal.id))
       setDeleteModal({ isOpen: false, id: null })
+      setNotice('Customer deleted.')
     } catch (err) {
+      setDeleteModal({ isOpen: false, id: null })
       setError(err instanceof Error ? err.message : 'Failed to delete customer')
     }
   }
 
-  if (loading) return <div className="business-page"><p>Loading customers...</p></div>
+  if (loading) return <LoadingBlock label="Loading customers…" />
 
   return (
     <section className="business-page">
       <h2>Customers</h2>
       <p>Manage customer information and utang records.</p>
 
-      {error && <div className="dashboard-error">{error}</div>}
+      {error && <div className="dashboard-error" role="alert">{error}</div>}
+      {notice && <div className="dashboard-notice" role="status">{notice}</div>}
 
       <button onClick={() => {
         if (editingCustomer) {
           setEditingCustomer(null)
           setFormData({ name: '', mobileNumber: '', address: '', creditLimit: '' })
         }
+        action.setFormError('')
         setShowAddForm(true)
       }} className="btn-primary" type="button">
         + Add Customer
       </button>
 
       {showAddForm && (
-        <EntryFormModal title={editingCustomer ? 'Edit customer' : 'Add customer'} onClose={() => { setShowAddForm(false); setEditingCustomer(null); setFormData({ name: '', mobileNumber: '', address: '', creditLimit: '' }) }}>
+        <EntryFormModal error={action.formError} title={editingCustomer ? 'Edit customer' : 'Add customer'} onClose={() => { setShowAddForm(false); setEditingCustomer(null); setFormData({ name: '', mobileNumber: '', address: '', creditLimit: '' }) }}>
           <form onSubmit={editingCustomer ? handleUpdateCustomer : handleAddCustomer} className="customer-form">
             <label>Name<input placeholder="Name" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required /></label>
             <label>Contact number<input placeholder="Contact number" value={formData.mobileNumber} onChange={e => setFormData({ ...formData, mobileNumber: e.target.value })} /></label>
@@ -199,7 +228,7 @@ export function CustomersPage() {
             <label>Credit limit<input type="number" min="0" placeholder="Credit limit" value={formData.creditLimit} onChange={e => setFormData({ ...formData, creditLimit: e.target.value })} /></label>
             <div className="form-actions">
               <button type="button" className="btn-secondary" onClick={() => { setShowAddForm(false); setEditingCustomer(null); setFormData({ name: '', mobileNumber: '', address: '', creditLimit: '' }) }}>Cancel</button>
-              <button type="submit" className="btn-primary">{editingCustomer ? 'Save customer' : 'Add customer'}</button>
+              <button type="submit" className="btn-primary" disabled={action.saving}>{action.saving ? 'Saving…' : editingCustomer ? 'Save customer' : 'Add customer'}</button>
             </div>
           </form>
         </EntryFormModal>
@@ -258,6 +287,8 @@ export function ExpensesPage() {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string | null }>({ isOpen: false, id: null })
   const [formData, setFormData] = useState({ category: '', description: '', amount: '', expenseDate: '' })
+  const [notice, setNotice] = useState('')
+  const action = useSubmitAction()
 
   useEffect(() => {
     businessApi.expenses()
@@ -266,9 +297,10 @@ export function ExpensesPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleAddExpense = async (e: React.FormEvent) => {
+  const handleAddExpense = (e: React.FormEvent) => {
     e.preventDefault()
-    try {
+    void action.run(async () => {
+      setError('')
       const result = await businessApi.addExpense({
         category: formData.category,
         description: formData.description,
@@ -279,17 +311,18 @@ export function ExpensesPage() {
       setShowAddForm(false)
       setEditingExpense(null)
       setFormData({ category: '', description: '', amount: '', expenseDate: '' })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add expense')
-    }
+      setNotice('Expense added.')
+    }, 'Failed to add expense')
   }
 
   const handleEditExpense = (expense: Expense) => {
     if (editingExpense?._id === expense._id) {
+      action.setFormError('')
       setShowAddForm(true)
       return
     }
     setEditingExpense(expense)
+    action.setFormError('')
     setShowAddForm(true)
     setFormData({
       category: expense.category,
@@ -299,10 +332,11 @@ export function ExpensesPage() {
     })
   }
 
-  const handleUpdateExpense = async (e: React.FormEvent) => {
+  const handleUpdateExpense = (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingExpense) return
-    try {
+    void action.run(async () => {
+      setError('')
       const result = await businessApi.updateExpense(editingExpense._id, {
         category: formData.category,
         description: formData.description,
@@ -313,9 +347,8 @@ export function ExpensesPage() {
       setEditingExpense(null)
       setShowAddForm(false)
       setFormData({ category: '', description: '', amount: '', expenseDate: '' })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update expense')
-    }
+      setNotice('Expense saved.')
+    }, 'Failed to update expense')
   }
 
   const handleDeleteExpense = async (id: string) => {
@@ -328,32 +361,36 @@ export function ExpensesPage() {
       await businessApi.deleteExpense(deleteModal.id)
       setExpenses(expenses.filter(e => e._id !== deleteModal.id))
       setDeleteModal({ isOpen: false, id: null })
+      setNotice('Expense deleted.')
     } catch (err) {
+      setDeleteModal({ isOpen: false, id: null })
       setError(err instanceof Error ? err.message : 'Failed to delete expense')
     }
   }
 
-  if (loading) return <div className="business-page"><p>Loading expenses...</p></div>
+  if (loading) return <LoadingBlock label="Loading expenses…" />
 
   return (
     <section className="business-page">
       <h2>Expenses</h2>
       <p>Track and manage business expenses.</p>
 
-      {error && <div className="dashboard-error">{error}</div>}
+      {error && <div className="dashboard-error" role="alert">{error}</div>}
+      {notice && <div className="dashboard-notice" role="status">{notice}</div>}
 
       <button onClick={() => {
         if (editingExpense) {
           setEditingExpense(null)
           setFormData({ category: '', description: '', amount: '', expenseDate: '' })
         }
+        action.setFormError('')
         setShowAddForm(true)
       }} className="btn-primary" type="button">
         + Add Expense
       </button>
 
       {showAddForm && (
-        <EntryFormModal title={editingExpense ? 'Edit expense' : 'Add expense'} onClose={() => { setShowAddForm(false); setEditingExpense(null); setFormData({ category: '', description: '', amount: '', expenseDate: '' }) }}>
+        <EntryFormModal error={action.formError} title={editingExpense ? 'Edit expense' : 'Add expense'} onClose={() => { setShowAddForm(false); setEditingExpense(null); setFormData({ category: '', description: '', amount: '', expenseDate: '' }) }}>
           <form onSubmit={editingExpense ? handleUpdateExpense : handleAddExpense} className="customer-form">
             <label>Category<input placeholder="Category" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} required /></label>
             <label>Description<input placeholder="Description" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} required /></label>
@@ -361,7 +398,7 @@ export function ExpensesPage() {
             <label>Date<input type="date" value={formData.expenseDate} onChange={e => setFormData({ ...formData, expenseDate: e.target.value })} required /></label>
             <div className="form-actions">
               <button type="button" className="btn-secondary" onClick={() => { setShowAddForm(false); setEditingExpense(null); setFormData({ category: '', description: '', amount: '', expenseDate: '' }) }}>Cancel</button>
-              <button type="submit" className="btn-primary">{editingExpense ? 'Save expense' : 'Add expense'}</button>
+              <button type="submit" className="btn-primary" disabled={action.saving}>{action.saving ? 'Saving…' : editingExpense ? 'Save expense' : 'Add expense'}</button>
             </div>
           </form>
         </EntryFormModal>
@@ -415,14 +452,14 @@ export function ReportsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="business-page"><p>Loading reports...</p></div>
+  if (loading) return <LoadingBlock label="Loading reports…" />
 
   return (
     <section className="business-page">
       <h2>Reports</h2>
       <p>View business reports and analytics.</p>
 
-      {error && <div className="dashboard-error">{error}</div>}
+      {error && <div className="dashboard-error" role="alert">{error}</div>}
 
       {report && (
         <>
@@ -445,47 +482,47 @@ export function ReportsPage() {
             </div>
           </div>
 
-          <h3>Daily Sales</h3>
-          <div className="customer-list">
-            {report.daily.map(daily => (
-              <div key={daily._id} className="customer-card">
-                <div className="customer-info">
-                  <h3>{new Date(daily._id).toLocaleDateString()}</h3>
-                </div>
-                <div className="customer-utang">
-                  <div className="utang-row">
-                    <span>Sales:</span>
-                    <span>{formatPeso(daily.sales)}</span>
-                  </div>
-                  <div className="utang-row">
-                    <span>Profit:</span>
-                    <span>{formatPeso(daily.profit)}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <h3 className="section-title">Daily Sales</h3>
+          {report.daily.length === 0 ? (
+            <div className="empty-state">No sales in this period yet. Completed sales from the POS will appear here by day.</div>
+          ) : (
+            <div className="data-table-wrap">
+              <table className="data-table">
+                <caption className="sr-only">Sales and profit for each day</caption>
+                <thead><tr><th scope="col">Date</th><th scope="col" className="num">Sales</th><th scope="col" className="num">Profit</th></tr></thead>
+                <tbody>
+                  {report.daily.map(daily => (
+                    <tr key={daily._id}>
+                      <th scope="row">{new Date(daily._id).toLocaleDateString()}</th>
+                      <td className="num">{formatPeso(daily.sales)}</td>
+                      <td className="num">{formatPeso(daily.profit)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-          <h3>Payment Methods</h3>
-          <div className="customer-list">
-            {report.paymentMethods.map(pm => (
-              <div key={pm._id} className="customer-card">
-                <div className="customer-info">
-                  <h3>{pm._id}</h3>
-                </div>
-                <div className="customer-utang">
-                  <div className="utang-row">
-                    <span>Total:</span>
-                    <span>{formatPeso(pm.total)}</span>
-                  </div>
-                  <div className="utang-row">
-                    <span>Count:</span>
-                    <span>{pm.count}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <h3 className="section-title">Payment Methods</h3>
+          {report.paymentMethods.length === 0 ? (
+            <div className="empty-state">No payments recorded yet.</div>
+          ) : (
+            <div className="data-table-wrap">
+              <table className="data-table">
+                <caption className="sr-only">Totals for each payment method</caption>
+                <thead><tr><th scope="col">Method</th><th scope="col" className="num">Total</th><th scope="col" className="num">Transactions</th></tr></thead>
+                <tbody>
+                  {report.paymentMethods.map(pm => (
+                    <tr key={pm._id}>
+                      <th scope="row">{pm._id}</th>
+                      <td className="num">{formatPeso(pm.total)}</td>
+                      <td className="num">{pm.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
     </section>
@@ -504,14 +541,14 @@ export function SalesPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="business-page"><p>Loading sales...</p></div>
+  if (loading) return <LoadingBlock label="Loading sales…" />
 
   return (
     <section className="business-page">
       <h2>Sales</h2>
       <p>View and manage sales records.</p>
 
-      {error && <div className="dashboard-error">{error}</div>}
+      {error && <div className="dashboard-error" role="alert">{error}</div>}
 
       <div className="customer-list">
         {sales.length === 0 ? (
@@ -631,7 +668,7 @@ export function SettingsPage() {
     }
   }
 
-  if (loading) return <div className="business-page"><p>Loading settings...</p></div>
+  if (loading) return <LoadingBlock label="Loading settings…" />
 
   return (
     <section className="business-page settings-page">
@@ -771,6 +808,8 @@ export function SuppliersPage() {
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string | null }>({ isOpen: false, id: null })
   const [formData, setFormData] = useState({ name: '', contactNumber: '', address: '' })
+  const [notice, setNotice] = useState('')
+  const action = useSubmitAction()
 
   useEffect(() => {
     businessApi.suppliers()
@@ -779,9 +818,10 @@ export function SuppliersPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleAddSupplier = async (e: React.FormEvent) => {
+  const handleAddSupplier = (e: React.FormEvent) => {
     e.preventDefault()
-    try {
+    void action.run(async () => {
+      setError('')
       const result = await businessApi.addSupplier({
         name: formData.name,
         contactNumber: formData.contactNumber,
@@ -790,13 +830,13 @@ export function SuppliersPage() {
       setSuppliers([...suppliers, result.supplier])
       setShowAddForm(false)
       setFormData({ name: '', contactNumber: '', address: '' })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add supplier')
-    }
+      setNotice('Supplier added.')
+    }, 'Failed to add supplier')
   }
 
   const handleEditSupplier = (supplier: Supplier) => {
     setEditingSupplier(supplier)
+    action.setFormError('')
     setShowAddForm(true)
     setFormData({
       name: supplier.name,
@@ -805,10 +845,11 @@ export function SuppliersPage() {
     })
   }
 
-  const handleUpdateSupplier = async (e: React.FormEvent) => {
+  const handleUpdateSupplier = (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingSupplier) return
-    try {
+    void action.run(async () => {
+      setError('')
       const result = await businessApi.updateSupplier(editingSupplier._id, {
         name: formData.name,
         contactNumber: formData.contactNumber,
@@ -818,9 +859,8 @@ export function SuppliersPage() {
       setEditingSupplier(null)
       setShowAddForm(false)
       setFormData({ name: '', contactNumber: '', address: '' })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update supplier')
-    }
+      setNotice('Supplier saved.')
+    }, 'Failed to update supplier')
   }
 
   const handleDeleteSupplier = async (id: string) => {
@@ -833,39 +873,43 @@ export function SuppliersPage() {
       await businessApi.deleteSupplier(deleteModal.id)
       setSuppliers(suppliers.filter(s => s._id !== deleteModal.id))
       setDeleteModal({ isOpen: false, id: null })
+      setNotice('Supplier deleted.')
     } catch (err) {
+      setDeleteModal({ isOpen: false, id: null })
       setError(err instanceof Error ? err.message : 'Failed to delete supplier')
     }
   }
 
-  if (loading) return <div className="business-page"><p>Loading suppliers...</p></div>
+  if (loading) return <LoadingBlock label="Loading suppliers…" />
 
   return (
     <section className="business-page">
       <h2>Suppliers</h2>
       <p>Manage supplier information and orders.</p>
 
-      {error && <div className="dashboard-error">{error}</div>}
+      {error && <div className="dashboard-error" role="alert">{error}</div>}
+      {notice && <div className="dashboard-notice" role="status">{notice}</div>}
 
       <button onClick={() => {
         if (editingSupplier) {
           setEditingSupplier(null)
           setFormData({ name: '', contactNumber: '', address: '' })
         }
+        action.setFormError('')
         setShowAddForm(true)
       }} className="btn-primary" type="button">
         + Add Supplier
       </button>
 
       {showAddForm && (
-        <EntryFormModal title={editingSupplier ? 'Edit supplier' : 'Add supplier'} onClose={() => { setShowAddForm(false); setEditingSupplier(null); setFormData({ name: '', contactNumber: '', address: '' }) }}>
+        <EntryFormModal error={action.formError} title={editingSupplier ? 'Edit supplier' : 'Add supplier'} onClose={() => { setShowAddForm(false); setEditingSupplier(null); setFormData({ name: '', contactNumber: '', address: '' }) }}>
           <form onSubmit={editingSupplier ? handleUpdateSupplier : handleAddSupplier} className="customer-form">
             <label>Name<input placeholder="Name" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required /></label>
             <label>Contact number<input placeholder="Contact number" value={formData.contactNumber} onChange={e => setFormData({ ...formData, contactNumber: e.target.value })} /></label>
             <label>Address<input placeholder="Address" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} /></label>
             <div className="form-actions">
               <button type="button" className="btn-secondary" onClick={() => { setShowAddForm(false); setEditingSupplier(null); setFormData({ name: '', contactNumber: '', address: '' }) }}>Cancel</button>
-              <button type="submit" className="btn-primary">{editingSupplier ? 'Save supplier' : 'Add supplier'}</button>
+              <button type="submit" className="btn-primary" disabled={action.saving}>{action.saving ? 'Saving…' : editingSupplier ? 'Save supplier' : 'Add supplier'}</button>
             </div>
           </form>
         </EntryFormModal>

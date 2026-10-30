@@ -175,6 +175,7 @@ export function StoreOperationsDemo() {
               </label>
             </div>
             <p className="chart-summary">{dashboard ? `Best day: ${formatPeso(chartMax === 1 && !chartData.some((point) => point.sales > 0) ? 0 : chartMax)} · Total: ${formatPeso(chartData.reduce((sum, point) => sum + point.sales, 0))}` : 'Loading…'}</p>
+            {dashboard && !chartData.some((point) => point.sales > 0) && <p className="chart-empty">No sales in this period yet. The chart fills in as you complete sales in the POS.</p>}
             <svg viewBox="0 0 760 220" className="chart-svg" role="img" aria-label={`Sales chart, ${salesPeriod}: ${chartData.map((point) => `${point.date} ${formatPeso(point.sales)}`).join(', ')}`}>
               <path d={chartAreaPath} fill="rgba(59, 130, 246, 0.18)" />
               <path d={chartPath} fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" />

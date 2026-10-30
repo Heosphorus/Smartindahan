@@ -37,7 +37,7 @@ export function RestockSuggestions() {
       </div>
 
       {error && <p className="dashboard-error" role="alert">{error} <button type="button" className="btn-secondary" onClick={() => setAttempt((count) => count + 1)}>Try again</button></p>}
-      {!insights && !error && <p role="status">Calculating…</p>}
+      {!insights && !error && <p className="loading-block" role="status"><span className="spinner" aria-hidden="true" />Calculating…</p>}
 
       {insights && (
         <>
