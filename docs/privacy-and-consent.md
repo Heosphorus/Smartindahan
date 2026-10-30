@@ -9,7 +9,7 @@ How smarTindahan shows its policies, records agreements, and handles data reques
 | `/terms`, `/privacy` | Public pages (no account needed). `?version=<id>` shows an older version. Each has a section list, version, effective date, draft banner and version history. |
 | Registration | One unchecked checkbox with links to both pages (they open in a new tab so the form is not lost). |
 | Login screen | Footer links. |
-| Signed-in app | Footer links on every page; Settings → Privacy and security. |
+| Signed-in app | Settings → Privacy and security (the footer links were removed from signed-in pages). |
 | After a policy change | A review screen (Terms) or a notice banner (Privacy Policy). |
 
 Text in `[square brackets]` is highlighted as a placeholder or open decision. Nothing in brackets is a real fact.

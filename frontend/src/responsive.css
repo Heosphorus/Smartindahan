@@ -60,13 +60,8 @@ html {
   }
 }
 
-/* Touch screens: links and table sort buttons that were about 22px tall are hard to hit with a thumb. */
+/* Touch screens: table sort buttons that were about 22px tall are hard to hit with a thumb. */
 @media (max-width: 820px), (pointer: coarse) {
-  .app-legal-footer a {
-    display: inline-block;
-    padding: 11px 4px;
-  }
-
   .price-sort-button {
     min-height: 36px;
   }
