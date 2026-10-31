@@ -462,6 +462,7 @@
 }
 
 .price-form-grid input,
+.price-form-grid select,
 .bulk-modal input,
 .bulk-modal select,
 .bulk-modal textarea {
@@ -477,6 +478,7 @@
 }
 
 .price-form-grid input:focus-visible,
+.price-form-grid select:focus-visible,
 .bulk-modal :is(input, select, textarea):focus-visible,
 .price-filter select:focus-visible {
   border-color: var(--price-accent);
@@ -662,6 +664,7 @@ html[data-theme='dark'] .price-filter select,
 html[data-theme='dark'] .price-secondary,
 html[data-theme='dark'] .price-actions button,
 html[data-theme='dark'] .price-form-grid input,
+html[data-theme='dark'] .price-form-grid select,
 html[data-theme='dark'] .price-barcode-field > input,
 html[data-theme='dark'] .bulk-modal :is(input, select, textarea) {
   border-color: var(--app-border);
@@ -824,7 +827,7 @@ html[data-theme='dark'] .bulk-modal > label {
 }
 
 .bulk-names,
-.bulk-wide {
+.price-form-wide {
   grid-column: 1 / -1;
 }
 

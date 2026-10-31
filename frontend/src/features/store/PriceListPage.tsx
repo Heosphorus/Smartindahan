@@ -17,6 +17,8 @@ type EditorState = { product?: ProductRecord; form: ProductForm; visible: boolea
 /** What the bulk dialog hands back: each product with its own price if given, plus the values shared by every product. */
 type BulkState = { items: BulkLine[]; category: string; unit: string; brand: string; costPrice: string; sellingPrice: string; currentStock: string; minStock: string }
 const blankBulk = { names: '', category: '', customCategory: '', brand: '', costPrice: '', sellingPrice: '', currentStock: '', minStock: '', unit: 'piece' }
+/** The dropdown choice that reveals a text box for a category that does not exist yet. */
+const NEW_CATEGORY = '__new__'
 export const BULK_NAMES_LIMIT = 256
 const PRODUCT_NAME_LIMIT = 64
 type StockFilter = 'all' | 'in-stock' | 'low-stock' | 'out-of-stock'
@@ -54,9 +56,17 @@ function displayPrice(value: number | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? formatPeso(value) : 'Review required'
 }
 
-function ProductEditor({ value, title, isSaving, error, onCancel, onClose, onSave }: {
+/** A typed category that only differs from an existing one by capital letters or spacing is saved with the existing spelling, so the dropdown never lists "Beverages" and "beverages". */
+const matchCategory = (existing: string[], typed: string) => {
+  const wanted = typed.trim().replace(/\s+/g, ' ').toLocaleLowerCase()
+  return existing.find((item) => item.toLocaleLowerCase() === wanted) ?? typed.trim()
+}
+
+function ProductEditor({ value, title, categories, isSaving, error, onCancel, onClose, onSave }: {
   value: ProductForm
   title: string
+  /** Categories already used by this store's products. */
+  categories: string[]
   isSaving: boolean
   error: string
   onCancel: () => void
@@ -68,11 +78,24 @@ function ProductEditor({ value, title, isSaving, error, onCancel, onClose, onSav
   const [barcodeLookupMessage, setBarcodeLookupMessage] = useState('')
   const [isLookingUpBarcode, setIsLookingUpBarcode] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
+  const [creatingCategory, setCreatingCategory] = useState(false)
   useEscapeKey(!cameraOpen, onCancel)
 
   const update = (field: keyof ProductForm, next: string) => {
     setForm((current) => ({ ...current, [field]: next }))
     setValidationError('')
+  }
+
+  // A category that is not in the list (typed here, or filled in from a barcode lookup) is shown as a new category.
+  const typingNewCategory = creatingCategory || (form.category.trim() !== '' && !categories.includes(form.category))
+  const chooseCategory = (next: string) => {
+    if (next === NEW_CATEGORY) {
+      setCreatingCategory(true)
+      update('category', '')
+    } else {
+      setCreatingCategory(false)
+      update('category', next)
+    }
   }
 
   const handleBarcodeLookup = async () => {
@@ -106,7 +129,7 @@ function ProductEditor({ value, title, isSaving, error, onCancel, onClose, onSav
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!form.name.trim() || !form.category.trim() || !form.unit.trim()) {
-      setValidationError('Enter a product name, category, and unit.')
+      setValidationError('Enter a product name, choose or add a category, and enter a unit.')
       return
     }
     if (!isValidNumber(form.costPrice) || !isValidNumber(form.sellingPrice)) {
@@ -121,7 +144,7 @@ function ProductEditor({ value, title, isSaving, error, onCancel, onClose, onSav
       setValidationError('Minimum stock must be a non-negative whole number.')
       return
     }
-    onSave(form)
+    onSave({ ...form, category: matchCategory(categories, form.category) })
   }
 
   const priceNeedsReview = Number(form.costPrice) === 0 || Number(form.sellingPrice) === 0
@@ -134,7 +157,8 @@ function ProductEditor({ value, title, isSaving, error, onCancel, onClose, onSav
       </div>
       <div className="price-form-grid">
         <label><span>Product name <span className="required-mark" aria-hidden="true">*</span></span><input autoFocus autoComplete="off" value={form.name} onChange={(event) => update('name', event.target.value)} required /></label>
-        <label><span>Category <span className="required-mark" aria-hidden="true">*</span></span><input value={form.category} onChange={(event) => update('category', event.target.value)} placeholder="e.g. Beverages" required /></label>
+        <label><span>Category <span className="required-mark" aria-hidden="true">*</span></span><select value={typingNewCategory ? NEW_CATEGORY : form.category} onChange={(event) => chooseCategory(event.target.value)} required><option value="">Select a category</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}<option value={NEW_CATEGORY}>Add a new category</option></select></label>
+        {typingNewCategory && <label className="price-form-wide"><span>New category <span className="required-mark" aria-hidden="true">*</span></span><input autoFocus autoComplete="off" value={form.category} onChange={(event) => update('category', event.target.value)} placeholder="e.g. Beverages" required /></label>}
         <label>Brand<input value={form.brand} onChange={(event) => update('brand', event.target.value)} /></label>
         {title === 'Add product' ? <div className="price-barcode-field"><label htmlFor="price-product-barcode">Barcode</label><input id="price-product-barcode" inputMode="numeric" autoComplete="off" maxLength={64} value={form.barcode} onChange={(event) => update('barcode', event.target.value)} /><div className="price-barcode-actions"><button type="button" className="price-secondary" onClick={() => setCameraOpen(true)} disabled={isSaving}>Scan barcode</button><button type="button" className="price-secondary" onClick={() => void handleBarcodeLookup()} disabled={isLookingUpBarcode || isSaving}>{isLookingUpBarcode ? 'Looking up…' : 'Fill from barcode'}</button></div>{barcodeLookupMessage && <p className="price-barcode-message" role="status">{barcodeLookupMessage}</p>}</div> : <label>Barcode<input inputMode="numeric" autoComplete="off" maxLength={64} value={form.barcode} onChange={(event) => update('barcode', event.target.value)} /></label>}
         <label><span>Cost per unit (PHP) <span className="required-mark" aria-hidden="true">*</span></span><input type="number" min="0" step="0.01" inputMode="decimal" value={form.costPrice} onChange={(event) => update('costPrice', event.target.value)} required /></label>
@@ -189,7 +213,8 @@ export function BulkProductDialog({ categories, isSaving, error, onCancel, onSav
     })
   }, [lines])
   const duplicateCount = lines.length - preparedItems.length
-  const categoryName = form.category === '__new__' ? form.customCategory.trim() : form.category.trim()
+  const knownCategories = categories.filter((item) => item !== 'All')
+  const categoryName = form.category === NEW_CATEGORY ? matchCategory(knownCategories, form.customCategory) : form.category.trim()
   const costBlank = form.costPrice.trim() === ''
   const sellingBlank = form.sellingPrice.trim() === ''
   // The shared selling price is only needed for lines that do not carry their own.
@@ -251,9 +276,9 @@ export function BulkProductDialog({ categories, isSaving, error, onCancel, onSav
             <p className="bulk-format">One product per line. Add a price after a comma, like <strong>Canned sardines, 25</strong>. A line with no price uses the selling price below.</p>
             <p id="bulk-names-hint" className={'bulk-counter' + (remaining <= 20 ? ' near-limit' : '')}>{form.names.length} / {BULK_NAMES_LIMIT} characters, prices included. Each name can be up to {PRODUCT_NAME_LIMIT}.</p>
           </div>
-          <label><span>Category <span className="required-mark" aria-hidden="true">*</span></span><select value={form.category} onChange={(event) => update('category', event.target.value)} required><option value="">Select a category</option>{categories.filter((item) => item !== 'All').map((item) => <option key={item} value={item}>{item}</option>)}<option value="__new__">Add a new category</option></select></label>
+          <label><span>Category <span className="required-mark" aria-hidden="true">*</span></span><select value={form.category} onChange={(event) => update('category', event.target.value)} required><option value="">Select a category</option>{knownCategories.map((item) => <option key={item} value={item}>{item}</option>)}<option value={NEW_CATEGORY}>Add a new category</option></select></label>
           <label>Brand<input value={form.brand} onChange={(event) => update('brand', event.target.value)} autoComplete="off" /></label>
-          {form.category === '__new__' && <label className="bulk-wide"><span>New category <span className="required-mark" aria-hidden="true">*</span></span><input value={form.customCategory} onChange={(event) => update('customCategory', event.target.value)} autoComplete="off" required /></label>}
+          {form.category === NEW_CATEGORY && <label className="price-form-wide"><span>New category <span className="required-mark" aria-hidden="true">*</span></span><input value={form.customCategory} onChange={(event) => update('customCategory', event.target.value)} autoComplete="off" required /></label>}
           <label><span>Cost per unit (PHP) <span className="optional-mark">optional</span></span><input type="number" min="0" step="0.01" inputMode="decimal" value={form.costPrice} onChange={(event) => update('costPrice', event.target.value)} /></label>
           <label><span>Selling price (PHP) {needsDefaultPrice ? <span className="required-mark" aria-hidden="true">*</span> : <span className="optional-mark">optional</span>}</span><input type="number" min="0" step="0.01" inputMode="decimal" value={form.sellingPrice} onChange={(event) => update('sellingPrice', event.target.value)} aria-required={needsDefaultPrice ? 'true' : undefined} /></label>
           <label>Current stock<input type="number" min="0" step="1" inputMode="numeric" value={form.currentStock} onChange={(event) => update('currentStock', event.target.value)} /></label>
@@ -506,7 +531,7 @@ export function PriceListPage() {
       {!isLoading && filtered.length > 0 && <div className="price-pagination"><span>Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}</span><div><button type="button" className="price-secondary" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={currentPage <= 1}>Previous</button><span>Page {currentPage} of {pageCount}</span><button type="button" className="price-secondary" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={currentPage >= pageCount}>Next</button></div></div>}
     </section>
 
-    {editor?.visible && <ProductEditor key={editor.product?._id ?? editor.product?.id ?? 'new-product'} title={editor.product ? 'Edit product' : 'Add product'} value={editor.form} isSaving={isSaving} error={error} onCancel={() => setEditor(null)} onClose={(form) => setEditor((current) => current ? { ...current, form, visible: false } : current)} onSave={(form) => void save(form)} />}
+    {editor?.visible && <ProductEditor key={editor.product?._id ?? editor.product?.id ?? 'new-product'} title={editor.product ? 'Edit product' : 'Add product'} categories={categories.filter((item) => item !== 'All')} value={editor.form} isSaving={isSaving} error={error} onCancel={() => setEditor(null)} onClose={(form) => setEditor((current) => current ? { ...current, form, visible: false } : current)} onSave={(form) => void save(form)} />}
     {bulk && <BulkProductDialog categories={categories} isSaving={isBulkSaving} error={error} onCancel={() => setBulk(false)} onSave={(value) => void bulkSave(value)} />}
     {deleteTarget && <ProductDeleteDialog product={deleteTarget} isDeleting={isDeleting} error={error} onCancel={() => setDeleteTarget(null)} onConfirm={() => void remove()} />}
   </section>

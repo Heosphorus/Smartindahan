@@ -45,6 +45,7 @@ npm test --prefix frontend
 - `features/business/BusinessPages.test.tsx` – create/edit dialogs: failed save shown inside the dialog with the typed text kept, a single submission while saving, success message; Reports empty states and tables.
 - `features/business/RestockSuggestions.test.tsx` – restock table order and wording, cover-days selector, empty state, error with retry.
 - `features/store/BulkProducts.test.tsx` – bulk add dialog: 256-character names box with counter, same fields as Add product, pricing placeholder, `Name, price` lines with a shared default price for lines without one, cost optional with an explanatory note, bad prices/cost and over-long names rejected, duplicates skipped, numeric payload sent from the Price List.
+- `features/store/ProductCategory.test.tsx` – Add/Edit product category dropdown: lists the store's categories once each, saves a chosen category, accepts a new typed category, reuses the existing spelling for case/spacing differences, asks for a category when none is given.
 - `features/pos/POSFlow.test.tsx` – price display, single submission with one idempotency key, name search, stock-capped quantities, checkout failure keeps the cart.
 
 ## Manual end-to-end journey
