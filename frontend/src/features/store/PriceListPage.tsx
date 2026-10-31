@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { storeApi, type ProductRecord } from '../../services/storeApi'
+import { storeApi, type BulkProductPayload, type ProductRecord } from '../../services/storeApi'
+import { parseBulkLine, type BulkLine } from './bulkLines'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { lookupPublicProduct } from '../../services/openFoodFacts'
 import { BarcodeCameraScanner } from '../pos/BarcodeCameraScanner'
@@ -13,7 +14,11 @@ const API_PAGE_SIZE = 100
 const blankForm = { name: '', category: '', brand: '', barcode: '', costPrice: '', sellingPrice: '', currentStock: '', minStock: '', unit: 'piece' }
 type ProductForm = typeof blankForm
 type EditorState = { product?: ProductRecord; form: ProductForm; visible: boolean }
-type BulkState = { names: string; category: string; unit: string }
+/** What the bulk dialog hands back: each product with its own price if given, plus the values shared by every product. */
+type BulkState = { items: BulkLine[]; category: string; unit: string; brand: string; costPrice: string; sellingPrice: string; currentStock: string; minStock: string }
+const blankBulk = { names: '', category: '', customCategory: '', brand: '', costPrice: '', sellingPrice: '', currentStock: '', minStock: '', unit: 'piece' }
+export const BULK_NAMES_LIMIT = 256
+const PRODUCT_NAME_LIMIT = 64
 type StockFilter = 'all' | 'in-stock' | 'low-stock' | 'out-of-stock'
 type SortField = 'name' | 'category' | 'costPrice' | 'sellingPrice' | 'profit' | 'currentStock'
 
@@ -162,58 +167,114 @@ function ProductDeleteDialog({ product, isDeleting, error, onCancel, onConfirm }
   </div>
 }
 
-function BulkProductDialog({ categories, isSaving, error, onCancel, onSave }: { categories: string[]; isSaving: boolean; error: string; onCancel: () => void; onSave: (value: BulkState) => void }) {
-  const [names, setNames] = useState('')
-  const [category, setCategory] = useState('')
-  const [customCategory, setCustomCategory] = useState('')
-  const [unit, setUnit] = useState('piece')
+export function BulkProductDialog({ categories, isSaving, error, onCancel, onSave }: { categories: string[]; isSaving: boolean; error: string; onCancel: () => void; onSave: (value: BulkState) => void }) {
+  const [form, setForm] = useState(blankBulk)
   const [showPreview, setShowPreview] = useState(false)
   const [validationError, setValidationError] = useState('')
   useEscapeKey(true, onCancel)
 
-  const preparedNames = useMemo(() => {
+  const update = (field: keyof typeof blankBulk, next: string) => {
+    setForm((current) => ({ ...current, [field]: next }))
+    setValidationError('')
+  }
+
+  const lines = useMemo(() => form.names.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map(parseBulkLine), [form.names])
+  const preparedItems = useMemo(() => {
     const seen = new Set<string>()
-    return names.split(/\r?\n/).map((name) => name.trim()).filter((name) => {
+    return lines.filter(({ name }) => {
       const normalized = name.toLocaleLowerCase()
-      if (!normalized || seen.has(normalized)) return false
+      if (seen.has(normalized)) return false
       seen.add(normalized)
       return true
     })
-  }, [names])
-  const categoryName = category === '__new__' ? customCategory.trim() : category.trim()
-  const duplicateCount = names.split(/\r?\n/).map((name) => name.trim()).filter(Boolean).length - preparedNames.length
+  }, [lines])
+  const duplicateCount = lines.length - preparedItems.length
+  const categoryName = form.category === '__new__' ? form.customCategory.trim() : form.category.trim()
+  const costBlank = form.costPrice.trim() === ''
+  const sellingBlank = form.sellingPrice.trim() === ''
+  // The shared selling price is only needed for lines that do not carry their own.
+  const needsDefaultPrice = preparedItems.length === 0 || preparedItems.some((item) => item.price === '')
+  const unpricedCount = preparedItems.filter((item) => item.price === '').length
+  const effectivePrice = (item: BulkLine) => Number(item.price === '' ? form.sellingPrice : item.price)
+  const remaining = BULK_NAMES_LIMIT - form.names.length
 
   const reviewImport = () => {
-    if (!preparedNames.length || !categoryName || !unit.trim()) {
+    if (!preparedItems.length || !categoryName || !form.unit.trim()) {
       setValidationError('Enter at least one product name, choose a category, and provide a unit.')
+      return
+    }
+    const longName = preparedItems.find((item) => item.name.length > PRODUCT_NAME_LIMIT)
+    if (longName) {
+      setValidationError('Each product name can be ' + PRODUCT_NAME_LIMIT + ' characters or fewer. Shorten "' + longName.name.slice(0, 20) + '…".')
+      return
+    }
+    const badPrice = preparedItems.find((item) => item.price !== '' && !isValidNumber(item.price))
+    if (badPrice) {
+      setValidationError('The price on "' + badPrice.name.slice(0, 20) + '" is not a valid amount. Use a number such as 25 or 12.50.')
+      return
+    }
+    if (needsDefaultPrice && (sellingBlank || !isValidNumber(form.sellingPrice))) {
+      setValidationError(preparedItems.some((item) => item.price !== '') ? 'Some products have no price. Add a price after a comma on each line, or enter a selling price for them below.' : 'Enter a valid selling price of zero or more.')
+      return
+    }
+    if (!sellingBlank && !isValidNumber(form.sellingPrice)) {
+      setValidationError('Selling price must be a valid amount of zero or more.')
+      return
+    }
+    if (!costBlank && !isValidNumber(form.costPrice)) {
+      setValidationError('Cost per unit must be a valid amount of zero or more, or left blank.')
+      return
+    }
+    if (form.currentStock.trim() !== '' && (!isValidNumber(form.currentStock) || !Number.isInteger(Number(form.currentStock)))) {
+      setValidationError('Stock quantity must be a non-negative whole number.')
+      return
+    }
+    if (form.minStock.trim() !== '' && (!isValidNumber(form.minStock) || !Number.isInteger(Number(form.minStock)))) {
+      setValidationError('Low stock alert must be a non-negative whole number.')
       return
     }
     setValidationError('')
     setShowPreview(true)
   }
 
+  const confirmImport = () => onSave({ items: preparedItems, category: categoryName, unit: form.unit.trim(), brand: form.brand.trim(), costPrice: form.costPrice, sellingPrice: form.sellingPrice, currentStock: form.currentStock, minStock: form.minStock })
+
   return <div className="price-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel() }}>
-    <div className="price-modal bulk-modal" role="dialog" aria-modal="true" aria-labelledby="bulk-products-title">
+    <form className="price-modal bulk-modal" role="dialog" aria-modal="true" aria-labelledby="bulk-products-title" noValidate onSubmit={(event) => { event.preventDefault(); if (!showPreview) reviewImport() }}>
       <div className="price-modal-header"><div><p className="price-eyebrow">QUICK CATALOG SETUP</p><h3 id="bulk-products-title">{showPreview ? 'Review products' : 'Bulk add products'}</h3></div><button type="button" className="price-close" onClick={onCancel} aria-label="Close bulk product form">&times;</button></div>
       {!showPreview ? <>
-        <p className="bulk-help">Enter one product name per line. New products start with zero prices and stock so you can update those values after import.</p>
-        <label>Category<select value={category} onChange={(event) => setCategory(event.target.value)} required><option value="">Select a category</option>{categories.filter((item) => item !== 'All').map((item) => <option key={item} value={item}>{item}</option>)}<option value="__new__">Add a new category</option></select></label>
-        {category === '__new__' && <label>New category<input value={customCategory} onChange={(event) => setCustomCategory(event.target.value)} required /></label>}
-        <label>Product names<textarea rows={8} value={names} onChange={(event) => { setNames(event.target.value); setValidationError('') }} placeholder={'Canned sardines\nInstant noodles\nBottled water'} required /></label>
-        <label>Unit<input value={unit} onChange={(event) => setUnit(event.target.value)} /></label>
+        <p className="bulk-help">Add many products at once. Each can have its own price; the category, brand, stock, and other details below are shared by all of them. You can edit any product afterwards.</p>
+        <div className="price-form-grid">
+          <div className="bulk-names">
+            <label htmlFor="bulk-product-names"><span>Product names <span className="required-mark" aria-hidden="true">*</span></span></label>
+            <textarea id="bulk-product-names" rows={6} maxLength={BULK_NAMES_LIMIT} data-long-text aria-required="true" aria-describedby="bulk-names-hint" value={form.names} onChange={(event) => update('names', event.target.value)} placeholder={'Canned sardines, 25\nInstant noodles, 12.50\nBottled water, 15\nCoffee sachet'} />
+            <p className="bulk-format">One product per line. Add a price after a comma, like <strong>Canned sardines, 25</strong>. A line with no price uses the selling price below.</p>
+            <p id="bulk-names-hint" className={'bulk-counter' + (remaining <= 20 ? ' near-limit' : '')}>{form.names.length} / {BULK_NAMES_LIMIT} characters, prices included. Each name can be up to {PRODUCT_NAME_LIMIT}.</p>
+          </div>
+          <label><span>Category <span className="required-mark" aria-hidden="true">*</span></span><select value={form.category} onChange={(event) => update('category', event.target.value)} required><option value="">Select a category</option>{categories.filter((item) => item !== 'All').map((item) => <option key={item} value={item}>{item}</option>)}<option value="__new__">Add a new category</option></select></label>
+          <label>Brand<input value={form.brand} onChange={(event) => update('brand', event.target.value)} autoComplete="off" /></label>
+          {form.category === '__new__' && <label className="bulk-wide"><span>New category <span className="required-mark" aria-hidden="true">*</span></span><input value={form.customCategory} onChange={(event) => update('customCategory', event.target.value)} autoComplete="off" required /></label>}
+          <label><span>Cost per unit (PHP) <span className="optional-mark">optional</span></span><input type="number" min="0" step="0.01" inputMode="decimal" value={form.costPrice} onChange={(event) => update('costPrice', event.target.value)} /></label>
+          <label><span>Selling price (PHP) {needsDefaultPrice ? <span className="required-mark" aria-hidden="true">*</span> : <span className="optional-mark">optional</span>}</span><input type="number" min="0" step="0.01" inputMode="decimal" value={form.sellingPrice} onChange={(event) => update('sellingPrice', event.target.value)} aria-required={needsDefaultPrice ? 'true' : undefined} /></label>
+          <label>Current stock<input type="number" min="0" step="1" inputMode="numeric" value={form.currentStock} onChange={(event) => update('currentStock', event.target.value)} /></label>
+          <label>Low stock alert at<input type="number" min="0" step="1" inputMode="numeric" value={form.minStock} onChange={(event) => update('minStock', event.target.value)} /></label>
+          <label><span>Unit <span className="required-mark" aria-hidden="true">*</span></span><input value={form.unit} onChange={(event) => update('unit', event.target.value)} required /></label>
+        </div>
         {duplicateCount > 0 && <p className="price-review-note" role="status">{duplicateCount} duplicate name{duplicateCount === 1 ? '' : 's'} will be skipped.</p>}
         {validationError && <p className="price-form-error" role="alert">{validationError}</p>}
         {error && <p className="price-form-error" role="alert">{error}</p>}
-        <div className="price-modal-actions"><button type="button" className="price-secondary" onClick={onCancel}>Cancel</button><button type="button" className="price-primary" onClick={reviewImport}>Preview {preparedNames.length} products</button></div>
+        <div className="price-modal-actions"><button type="button" className="price-secondary" onClick={onCancel}>Cancel</button><button type="submit" className="price-primary">Preview {preparedItems.length} products</button></div>
       </> : <>
-        <p className="bulk-help">Confirm the category and names before adding these products. Prices and stock will be zero until you edit each product.</p>
-        <div className="bulk-preview-summary"><strong>{preparedNames.length} products</strong><span>Category: {categoryName}</span><span>Unit: {unit.trim()}</span></div>
-        <ul className="bulk-preview-list">{preparedNames.map((name) => <li key={name}><span>{name}</span><span>Price needs review</span></li>)}</ul>
+        <p className="bulk-help">Check these details before adding. Prices typed on a line are kept; every other value below is shared by all products.</p>
+        <div className="bulk-preview-summary"><strong>{preparedItems.length} products</strong><span>Category: {categoryName}</span><span>Unit: {form.unit.trim()}</span>{unpricedCount > 0 && <span>{unpricedCount === preparedItems.length ? 'Selling price' : 'Price for lines without one'}: {formatPeso(Number(form.sellingPrice))}</span>}<span>{costBlank ? 'Cost: not set' : 'Cost: ' + formatPeso(Number(form.costPrice))}</span>{form.brand.trim() && <span>Brand: {form.brand.trim()}</span>}{form.currentStock.trim() !== '' && <span>Stock: {form.currentStock} each</span>}{form.minStock.trim() !== '' && <span>Low stock alert at {form.minStock}</span>}</div>
+        {costBlank && <p className="price-review-note" role="status">No cost entered, so it is saved as ₱0.00. Estimated profit will count the whole selling price until you add each product's cost.</p>}
+        {preparedItems.some((item) => effectivePrice(item) === 0) && <p className="price-review-note" role="status">{preparedItems.every((item) => effectivePrice(item) === 0) ? 'The selling price is ₱0.00. Review it if that was a mistake.' : 'Some products have a selling price of ₱0.00. Review them if that was a mistake.'}</p>}
+        <ul className="bulk-preview-list">{preparedItems.map((item) => <li key={item.name}><span>{item.name}</span><span>{formatPeso(effectivePrice(item))}</span></li>)}</ul>
         {validationError && <p className="price-form-error" role="alert">{validationError}</p>}
         {error && <p className="price-form-error" role="alert">{error}</p>}
-        <div className="price-modal-actions"><button type="button" className="price-secondary" onClick={() => setShowPreview(false)} disabled={isSaving}>Back to edit</button><button type="button" className="price-primary" disabled={isSaving} onClick={() => onSave({ names: preparedNames.join('\n'), category: categoryName, unit: unit.trim() })}>{isSaving ? 'Adding…' : 'Add ' + preparedNames.length + ' products'}</button></div>
+        <div className="price-modal-actions"><button type="button" className="price-secondary" onClick={() => setShowPreview(false)} disabled={isSaving}>Back to edit</button><button type="button" className="price-primary" disabled={isSaving} onClick={confirmImport}>{isSaving ? 'Adding…' : 'Add ' + preparedItems.length + ' products'}</button></div>
       </>}
-    </div>
+    </form>
   </div>
 }
 
@@ -362,7 +423,17 @@ export function PriceListPage() {
     setIsBulkSaving(true)
     setError('')
     try {
-      const response = await storeApi.bulkAddProducts(value.names.split('\n'), value.category, value.unit)
+      const payload: BulkProductPayload = {
+        items: value.items.map((item) => ({ name: item.name, ...(item.price !== '' ? { sellingPrice: Number(item.price) } : {}) })),
+        category: value.category,
+        unit: value.unit,
+        ...(value.sellingPrice.trim() !== '' ? { sellingPrice: Number(value.sellingPrice) } : {}),
+        ...(value.costPrice.trim() !== '' ? { costPrice: Number(value.costPrice) } : {}),
+        ...(value.brand ? { brand: value.brand } : {}),
+        ...(value.currentStock.trim() !== '' ? { initialStock: Number(value.currentStock) } : {}),
+        ...(value.minStock.trim() !== '' ? { minStock: Number(value.minStock) } : {}),
+      }
+      const response = await storeApi.bulkAddProducts(payload)
       setBulk(false)
       setNotice(response.message)
       await load()

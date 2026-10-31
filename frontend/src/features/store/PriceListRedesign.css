@@ -813,3 +813,76 @@ html[data-theme='dark'] .bulk-modal > label {
     display: none;
   }
 }
+
+/* Fields keep their own height, so a tall neighbour (the barcode field with its buttons) no longer stretches Brand. */
+.price-form-grid {
+  align-items: start;
+}
+
+.bulk-modal .price-form-grid label {
+  margin-bottom: 0;
+}
+
+.bulk-names,
+.bulk-wide {
+  grid-column: 1 / -1;
+}
+
+.bulk-names {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bulk-names label {
+  color: #334155;
+  font-size: .82rem;
+  font-weight: 700;
+}
+
+.bulk-counter {
+  margin: 0;
+  color: var(--price-muted);
+  font-size: .78rem;
+}
+
+.bulk-counter.near-limit {
+  color: #9a3412;
+  font-weight: 600;
+}
+
+.bulk-format {
+  margin: 0;
+  color: var(--price-muted);
+  font-size: .82rem;
+  line-height: 1.4;
+}
+
+.bulk-format strong {
+  color: var(--price-text, inherit);
+  font-weight: 600;
+}
+
+.optional-mark {
+  margin-left: 4px;
+  color: var(--price-muted);
+  font-size: .76rem;
+  font-weight: 400;
+}
+
+html[data-theme='dark'] .bulk-names label {
+  color: var(--app-text);
+}
+
+html[data-theme='dark'] .bulk-counter,
+html[data-theme='dark'] .bulk-format {
+  color: var(--app-muted);
+}
+
+html[data-theme='dark'] .bulk-format strong {
+  color: var(--app-text);
+}
+
+html[data-theme='dark'] .bulk-counter.near-limit {
+  color: #ffb27a;
+}

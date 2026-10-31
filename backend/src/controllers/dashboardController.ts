@@ -158,13 +158,53 @@ export async function createProduct(req: AuthenticatedRequest, res: Response): P
 export async function bulkCreateProducts(req: AuthenticatedRequest, res: Response): Promise<void> {
   const storeId = storeIdFromRequest(req)
   if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
-  const payload = (req.body ?? {}) as { names?: unknown; category?: unknown; unit?: unknown }
-  const names = Array.isArray(payload.names) ? Array.from(new Set(payload.names.map((name) => cleanText(name)).filter((name): name is string => name !== null))) : []
+  const payload = (req.body ?? {}) as { names?: unknown; items?: unknown; category?: unknown; unit?: unknown; brand?: unknown; costPrice?: unknown; sellingPrice?: unknown; initialStock?: unknown; minStock?: unknown }
+  // Products arrive either as plain names (all share the default price) or as items that can carry their own selling price.
+  const rawItems: unknown[] = Array.isArray(payload.items) ? payload.items : (Array.isArray(payload.names) ? payload.names.map((name) => ({ name })) : [])
+  const isBlankName = (name: unknown) => typeof name === 'string' && name.trim() === ''
+  const itemFields = rawItems.map((item) => (typeof item === 'object' && item !== null ? item as { name?: unknown; sellingPrice?: unknown } : { name: undefined, sellingPrice: undefined }))
+  if (itemFields.some((item) => cleanText(item.name) === null && !isBlankName(item.name))) { res.status(400).json({ message: 'Each product name must be text of 64 characters or fewer.' }); return }
   const category = cleanText(payload.category)
-  if (!names.length || !category) { res.status(400).json({ message: 'Product names and category are required.' }); return }
-  if (names.length > 200) { res.status(400).json({ message: 'Add at most 200 products at a time.' }); return }
+  // Cost is optional (stored as 0 when left out). The default selling price is 0 for older clients; a price on a product overrides it.
+  const costPrice = payload.costPrice ?? 0
+  const defaultSellingPrice = payload.sellingPrice ?? 0
+  if (!isMoney(costPrice) || !isMoney(defaultSellingPrice) || itemFields.some((item) => item.sellingPrice !== undefined && !isMoney(item.sellingPrice))) { res.status(400).json({ message: 'Cost price and selling price must be valid amounts of zero or more.' }); return }
+  const entries = new Map<string, number>()
+  for (const item of itemFields) {
+    const name = cleanText(item.name)
+    if (name !== null && !entries.has(name)) entries.set(name, (item.sellingPrice as number | undefined) ?? defaultSellingPrice)
+  }
+  if (!entries.size || !category) { res.status(400).json({ message: 'Product names and category are required.' }); return }
+  if (entries.size > 200) { res.status(400).json({ message: 'Add at most 200 products at a time.' }); return }
+  if ((payload.initialStock !== undefined && !isCount(payload.initialStock)) || (payload.minStock !== undefined && !isCount(payload.minStock))) { res.status(400).json({ message: 'Stock quantities must be whole numbers of zero or more.' }); return }
+  for (const optional of [payload.brand, payload.unit]) {
+    if (optional !== undefined && optional !== '' && cleanText(optional) === null) { res.status(400).json({ message: 'Brand and unit must be text of 64 characters or fewer.' }); return }
+  }
   const unit = cleanText(payload.unit) ?? 'piece'
-  const products = await ProductModel.insertMany(names.map((name) => ({ storeId, name, category, costPrice: 0, sellingPrice: 0, currentStock: 0, minStock: 0, unit })))
+  const brand = cleanText(payload.brand)
+  const currentStock = payload.initialStock ?? 0
+  const minStock = payload.minStock ?? 0
+  const userId = new mongoose.Types.ObjectId(req.user!.id)
+
+  const session = await mongoose.startSession()
+  let products: Awaited<ReturnType<typeof ProductModel.insertMany>> = []
+  try {
+    await session.withTransaction(async () => {
+      products = await ProductModel.insertMany(Array.from(entries, ([name, sellingPrice]) => ({ storeId, name, category, costPrice, sellingPrice, currentStock, minStock, unit, ...(brand ? { brand } : {}) })), { session })
+      if (currentStock > 0) {
+        await InventoryTransactionModel.create(products.map((product) => ({ storeId, userId, productId: product._id, type: 'stock_in' as const, quantity: currentStock, previousStock: 0, newStock: currentStock, reason: 'Initial product stock' })), { session, ordered: true })
+      }
+      for (const product of products) {
+        await recordAuditLog({ storeId, userId, event: 'PRODUCT_CREATED', resourceType: 'Product', resourceId: product._id }, session)
+      }
+    })
+  } catch (error) {
+    console.error('Bulk product creation failed:', error instanceof Error ? error.message : 'Unknown error')
+    res.status(500).json({ message: 'Products could not be added.' })
+    return
+  } finally {
+    await session.endSession()
+  }
   res.status(201).json({ message: `${products.length} products added.`, products })
 }
 

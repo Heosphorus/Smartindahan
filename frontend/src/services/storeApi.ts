@@ -32,12 +32,27 @@ export const storeApi = {
     return [...first.products, ...rest.flatMap((page) => page.products)]
   },
   addProduct: (payload: Record<string, unknown>) => storeRequest<{ product: ProductRecord }>('/products', payload),
-  bulkAddProducts: (names: string[], category: string, unit: string) => storeRequest<{ products: ProductRecord[]; message: string }>('/products/bulk', { names, category, unit }),
+  bulkAddProducts: (payload: BulkProductPayload) => storeRequest<{ products: ProductRecord[]; message: string }>('/products/bulk', payload),
   updateProduct: (id: string, payload: Record<string, unknown>) => storeRequest<{ product: ProductRecord }>(`/products/${id}`, payload, 'PATCH'),
   deleteProduct: (id: string) => storeRequest<{ message: string }>(`/products/${id}`, undefined, 'DELETE'),
   lookupProduct: (rawValue: string) => storeRequest<{ found: boolean; product?: ProductRecord }>(`/products/barcode/lookup`, { rawValue }),
   checkout: (items: Array<{ productId: string; quantity: number }>, paymentMethod = 'Cash', idempotencyKey?: string) => storeRequest<{ sale: { code: string; total: number; profit: number } }>('/sales/checkout', { items, paymentMethod, ...(idempotencyKey ? { idempotencyKey } : {}) }),
   inventoryCount: (productId: string, scannedQuantity: number) => storeRequest<{ message: string }>('/inventory/count', { counts: [{ productId, scannedQuantity }] }),
+}
+
+/**
+ * A bulk add: each item can carry its own selling price, and `sellingPrice` is the default for items without one.
+ * Everything else is shared by every product. Cost is optional; the server stores 0 when it is left out.
+ */
+export type BulkProductPayload = {
+  items: Array<{ name: string; sellingPrice?: number }>
+  category: string
+  unit: string
+  sellingPrice?: number
+  costPrice?: number
+  brand?: string
+  initialStock?: number
+  minStock?: number
 }
 
 export type ProductRecord = {
