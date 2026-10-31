@@ -33,12 +33,18 @@ export const storeApi = {
   },
   addProduct: (payload: Record<string, unknown>) => storeRequest<{ product: ProductRecord }>('/products', payload),
   bulkAddProducts: (payload: BulkProductPayload) => storeRequest<{ products: ProductRecord[]; message: string }>('/products/bulk', payload),
+  /** Renames a category on all its products. A name that matches another category merges the two. */
+  renameCategory: (name: string, newName: string) => storeRequest<CategoryChange>('/categories/rename', { name, newName }),
+  /** Deletes a category. Its products are kept and moved to `moveTo`, or to "Uncategorized" when that is left out. */
+  deleteCategory: (name: string, moveTo?: string) => storeRequest<CategoryChange>('/categories/delete', { name, ...(moveTo ? { moveTo } : {}) }),
   updateProduct: (id: string, payload: Record<string, unknown>) => storeRequest<{ product: ProductRecord }>(`/products/${id}`, payload, 'PATCH'),
   deleteProduct: (id: string) => storeRequest<{ message: string }>(`/products/${id}`, undefined, 'DELETE'),
   lookupProduct: (rawValue: string) => storeRequest<{ found: boolean; product?: ProductRecord }>(`/products/barcode/lookup`, { rawValue }),
   checkout: (items: Array<{ productId: string; quantity: number }>, paymentMethod = 'Cash', idempotencyKey?: string) => storeRequest<{ sale: { code: string; total: number; profit: number } }>('/sales/checkout', { items, paymentMethod, ...(idempotencyKey ? { idempotencyKey } : {}) }),
   inventoryCount: (productId: string, scannedQuantity: number) => storeRequest<{ message: string }>('/inventory/count', { counts: [{ productId, scannedQuantity }] }),
 }
+
+export type CategoryChange = { message: string; category: string; moved: number }
 
 /**
  * A bulk add: each item can carry its own selling price, and `sellingPrice` is the default for items without one.

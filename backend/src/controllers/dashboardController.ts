@@ -208,6 +208,55 @@ export async function bulkCreateProducts(req: AuthenticatedRequest, res: Respons
   res.status(201).json({ message: `${products.length} products added.`, products })
 }
 
+const UNCATEGORIZED = 'Uncategorized'
+const sameWords = (left: string, right: string) => left.replace(/\s+/g, ' ').toLocaleLowerCase() === right.replace(/\s+/g, ' ').toLocaleLowerCase()
+
+/**
+ * Categories are just the category text on products, so renaming or deleting one moves its products to another name.
+ * Deleting never deletes products: they go to the chosen category, or "Uncategorized".
+ */
+async function changeCategory(req: AuthenticatedRequest, res: Response, mode: 'rename' | 'delete'): Promise<void> {
+  const storeId = storeIdFromRequest(req)
+  if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
+  const payload = (req.body ?? {}) as { name?: unknown; newName?: unknown; moveTo?: unknown }
+  const from = cleanText(payload.name)
+  const requested = mode === 'rename' ? payload.newName : (payload.moveTo === undefined || payload.moveTo === '' ? UNCATEGORIZED : payload.moveTo)
+  const to = cleanText(requested)
+  if (!from || !to) { res.status(400).json({ message: mode === 'rename' ? 'Enter the category and its new name, up to 64 characters.' : 'Category names must be text of 64 characters or fewer.' }); return }
+  if (mode === 'rename' && from === to) { res.status(400).json({ message: 'Enter a different name.' }); return }
+  if (mode === 'delete' && sameWords(from, to)) { res.status(400).json({ message: 'Choose a different category to move the products to.' }); return }
+
+  const existing = (await ProductModel.distinct('category', { storeId, status: 'active' })) as string[]
+  if (!existing.includes(from)) { res.status(404).json({ message: 'Category not found.' }); return }
+  // A name that only differs by capitals or spacing from another category joins that category instead of creating a lookalike.
+  const target = existing.find((name) => name !== from && sameWords(name, to)) ?? to
+  const merged = target !== from && existing.includes(target)
+  const moved = await ProductModel.countDocuments({ storeId, category: from, status: 'active' })
+  const userId = new mongoose.Types.ObjectId(req.user!.id)
+
+  const session = await mongoose.startSession()
+  try {
+    await session.withTransaction(async () => {
+      await ProductModel.updateMany({ storeId, category: from }, { $set: { category: target } }, { session })
+      await recordAuditLog({ storeId, userId, event: mode === 'rename' ? 'CATEGORY_RENAMED' : 'CATEGORY_DELETED', resourceType: 'Category', resourceId: storeId, metadata: { from, to: target, products: moved } }, session)
+    })
+  } catch (error) {
+    console.error('Category change failed:', error instanceof Error ? error.message : 'Unknown error')
+    res.status(500).json({ message: 'The category could not be changed.' })
+    return
+  } finally {
+    await session.endSession()
+  }
+  const count = `${moved} ${moved === 1 ? 'product' : 'products'}`
+  const message = mode === 'rename'
+    ? (merged ? `"${from}" was merged into "${target}" (${count}).` : `"${from}" was renamed to "${target}" (${count}).`)
+    : `"${from}" was deleted. ${count} moved to "${target}".`
+  res.json({ message, category: target, moved })
+}
+
+export const renameCategory = (req: AuthenticatedRequest, res: Response) => changeCategory(req, res, 'rename')
+export const deleteCategory = (req: AuthenticatedRequest, res: Response) => changeCategory(req, res, 'delete')
+
 export async function updateProduct(req: AuthenticatedRequest, res: Response): Promise<void> {
   const storeId = storeIdFromRequest(req)
   if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }

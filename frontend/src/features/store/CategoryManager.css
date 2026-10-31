@@ -1,0 +1,122 @@
+.category-modal {
+  width: min(100%, 560px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.category-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid #dfe7f1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.category-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.category-info strong {
+  overflow-wrap: anywhere;
+  color: #12212b;
+}
+
+.category-info small {
+  color: #718087;
+}
+
+.category-edit {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.category-edit input,
+.category-edit select {
+  flex: 1 1 160px;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  color: #12212b;
+  font: inherit;
+}
+
+.category-delete {
+  display: grid;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.category-delete p {
+  margin: 0;
+  color: #38505a;
+  line-height: 1.4;
+}
+
+.category-empty {
+  margin: 0 0 8px;
+  color: #718087;
+}
+
+.category-modal .price-form-error,
+.category-modal .price-success {
+  margin: 0 0 12px;
+}
+
+@media (max-width: 480px) {
+  .category-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .category-modal .price-actions {
+    justify-content: flex-end;
+  }
+}
+
+html[data-theme='dark'] .category-item {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+}
+
+html[data-theme='dark'] .category-info strong {
+  color: var(--app-text);
+}
+
+html[data-theme='dark'] .category-info small,
+html[data-theme='dark'] .category-empty {
+  color: var(--app-muted);
+}
+
+html[data-theme='dark'] .category-delete p {
+  color: var(--app-text);
+}
+
+html[data-theme='dark'] .category-edit input,
+html[data-theme='dark'] .category-edit select {
+  border-color: var(--app-border);
+  background: #172126;
+  color: var(--app-text);
+}

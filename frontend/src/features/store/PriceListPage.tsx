@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { storeApi, type BulkProductPayload, type ProductRecord } from '../../services/storeApi'
 import { parseBulkLine, type BulkLine } from './bulkLines'
+import { CategoryManager, type CategoryRow } from './CategoryManager'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { lookupPublicProduct } from '../../services/openFoodFacts'
 import { BarcodeCameraScanner } from '../pos/BarcodeCameraScanner'
@@ -313,6 +314,7 @@ export function PriceListPage() {
   const [page, setPage] = useState(1)
   const [editor, setEditor] = useState<EditorState | null>(null)
   const [bulk, setBulk] = useState(false)
+  const [managingCategories, setManagingCategories] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ProductRecord | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -347,6 +349,7 @@ export function PriceListPage() {
   }, [notice])
 
   const categories = useMemo(() => ['All', ...Array.from(new Set(products.map((product) => product.category.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [products])
+  const categoryRows = useMemo<CategoryRow[]>(() => categories.filter((name) => name !== 'All').map((name) => ({ name, count: products.filter((product) => product.category.trim() === name).length })), [categories, products])
   const summary = useMemo(() => products.reduce((result, product) => {
     const status = stockStatus(product)
     result.lowStock += status === 'low-stock' ? 1 : 0
@@ -469,6 +472,16 @@ export function PriceListPage() {
     }
   }
 
+  // The category filter points at a name that may no longer exist after a rename or delete, so follow the products to the new name.
+  async function changeCategory(request: Promise<{ message: string; category: string }>, from: string) {
+    const response = await request
+    if (category === from) setCategory(response.category)
+    await load()
+    return response.message
+  }
+  const renameCategory = (name: string, newName: string) => changeCategory(storeApi.renameCategory(name, newName), name)
+  const deleteCategory = (name: string, moveTo: string) => changeCategory(storeApi.deleteCategory(name, moveTo), name)
+
   function sortButton(label: string, field: SortField) {
     const active = sortField === field
     const sortStatus = active ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
@@ -478,7 +491,7 @@ export function PriceListPage() {
   return <section className="price-page">
     <div className="price-page-heading">
       <div><p className="price-eyebrow">INVENTORY MANAGEMENT</p><h2>Price List</h2><p>Manage products, monitor stock, and keep your shelf prices current.</p></div>
-      <div className="price-heading-actions"><button className="price-secondary" type="button" onClick={() => setBulk(true)}>Bulk add</button><button className="price-primary" type="button" onClick={() => openEditor()}>Add product</button></div>
+      <div className="price-heading-actions"><button className="price-secondary" type="button" onClick={() => setManagingCategories(true)}>Manage categories</button><button className="price-secondary" type="button" onClick={() => setBulk(true)}>Bulk add</button><button className="price-primary" type="button" onClick={() => openEditor()}>Add product</button></div>
     </div>
 
     {notice && <div className="price-success" role="status">{notice}</div>}
@@ -532,6 +545,7 @@ export function PriceListPage() {
     </section>
 
     {editor?.visible && <ProductEditor key={editor.product?._id ?? editor.product?.id ?? 'new-product'} title={editor.product ? 'Edit product' : 'Add product'} categories={categories.filter((item) => item !== 'All')} value={editor.form} isSaving={isSaving} error={error} onCancel={() => setEditor(null)} onClose={(form) => setEditor((current) => current ? { ...current, form, visible: false } : current)} onSave={(form) => void save(form)} />}
+    {managingCategories && <CategoryManager categories={categoryRows} onRename={renameCategory} onDelete={deleteCategory} onClose={() => setManagingCategories(false)} />}
     {bulk && <BulkProductDialog categories={categories} isSaving={isBulkSaving} error={error} onCancel={() => setBulk(false)} onSave={(value) => void bulkSave(value)} />}
     {deleteTarget && <ProductDeleteDialog product={deleteTarget} isDeleting={isDeleting} error={error} onCancel={() => setDeleteTarget(null)} onConfirm={() => void remove()} />}
   </section>
