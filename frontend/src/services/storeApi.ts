@@ -33,6 +33,10 @@ export const storeApi = {
   },
   addProduct: (payload: Record<string, unknown>) => storeRequest<{ product: ProductRecord }>('/products', payload),
   bulkAddProducts: (payload: BulkProductPayload) => storeRequest<{ products: ProductRecord[]; message: string }>('/products/bulk', payload),
+  /** Changes the selling price and/or cost of the chosen products together; if any price would be invalid, none change. */
+  batchUpdateProducts: (ids: string[], changes: { sellingPrice?: PriceAdjustment; costPrice?: PriceAdjustment }) => storeRequest<{ message: string; updated: number; skipped: number }>('/products/batch-update', { ids, ...changes }),
+  /** Removes the chosen products from the price list (the same archive as the single Archive button). */
+  batchArchiveProducts: (ids: string[]) => storeRequest<{ message: string; archived: number }>('/products/batch-archive', { ids }),
   /** Renames a category on all its products. A name that matches another category merges the two. */
   renameCategory: (name: string, newName: string) => storeRequest<CategoryChange>('/categories/rename', { name, newName }),
   /** Deletes a category. Its products are kept and moved to `moveTo`, or to "Uncategorized" when that is left out. */
@@ -43,6 +47,9 @@ export const storeApi = {
   checkout: (items: Array<{ productId: string; quantity: number }>, paymentMethod = 'Cash', idempotencyKey?: string) => storeRequest<{ sale: { code: string; total: number; profit: number } }>('/sales/checkout', { items, paymentMethod, ...(idempotencyKey ? { idempotencyKey } : {}) }),
   inventoryCount: (productId: string, scannedQuantity: number) => storeRequest<{ message: string }>('/inventory/count', { counts: [{ productId, scannedQuantity }] }),
 }
+
+/** `set` is an exact price; `percent` and `amount` are added to the current price (negative values lower it). */
+export type PriceAdjustment = { type: 'set' | 'percent' | 'amount'; value: number }
 
 export type CategoryChange = { message: string; category: string; moved: number }
 

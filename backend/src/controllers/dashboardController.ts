@@ -10,6 +10,7 @@ import { UserModel } from '../models/User.js'
 import { recordAuditLog } from '../services/auditService.js'
 import { parsePagination } from '../utils/pagination.js'
 import { parseObjectId } from '../utils/objectId.js'
+import { applyAdjustment, parseAdjustment } from '../utils/priceAdjustment.js'
 import { pickRequestFields } from '../utils/requestFields.js'
 import { cleanText, isCount, isMoney } from '../utils/validation.js'
 import { STORE_TIMEZONE, startOfStoreDay, startOfStoreMonth, storeDateRange } from '../utils/storeTime.js'
@@ -280,6 +281,91 @@ export async function updateProduct(req: AuthenticatedRequest, res: Response): P
   if (!product) { res.status(404).json({ message: 'Product not found.' }); return }
   await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'PRODUCT_UPDATED', resourceType: 'Product', resourceId: product._id })
   res.json({ product })
+}
+
+const MAX_BATCH = 500
+
+/** Reads `ids` from a batch request: 1 to 500 distinct valid ids, or null when the list is unusable. */
+function parseBatchIds(raw: unknown): mongoose.Types.ObjectId[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_BATCH) return null
+  const ids = raw.map((value) => parseObjectId(value))
+  if (ids.some((id) => id === null)) return null
+  return Array.from(new Map((ids as mongoose.Types.ObjectId[]).map((id) => [id.toHexString(), id])).values())
+}
+
+/** Changes the selling price and/or cost of many products at once; all of them change, or none do. */
+export async function batchUpdateProducts(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const storeId = storeIdFromRequest(req)
+  if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
+  const payload = (req.body ?? {}) as { ids?: unknown; sellingPrice?: unknown; costPrice?: unknown }
+  const ids = parseBatchIds(payload.ids)
+  if (!ids) { res.status(400).json({ message: `Choose between 1 and ${MAX_BATCH} products.` }); return }
+  const selling = payload.sellingPrice === undefined ? undefined : parseAdjustment(payload.sellingPrice)
+  const cost = payload.costPrice === undefined ? undefined : parseAdjustment(payload.costPrice)
+  if (selling === null || cost === null) { res.status(400).json({ message: 'The price change is not valid.' }); return }
+  if (!selling && !cost) { res.status(400).json({ message: 'Choose a selling price or cost change.' }); return }
+
+  const products = await ProductModel.find({ _id: { $in: ids }, storeId, status: 'active' }).select('_id sellingPrice costPrice').lean()
+  if (!products.length) { res.status(404).json({ message: 'None of the selected products were found.' }); return }
+  const changes = products.map((product) => ({
+    id: product._id,
+    sellingPrice: selling ? applyAdjustment(product.sellingPrice, selling) : product.sellingPrice,
+    costPrice: cost ? applyAdjustment(product.costPrice, cost) : product.costPrice,
+  }))
+  const invalid = changes.filter((change) => change.sellingPrice === null || change.costPrice === null).length
+  if (invalid) {
+    res.status(400).json({ message: `${invalid} ${invalid === 1 ? 'product would' : 'products would'} end up with a price below zero or too large. Nothing was changed.` })
+    return
+  }
+  const userId = new mongoose.Types.ObjectId(req.user!.id)
+
+  const session = await mongoose.startSession()
+  try {
+    await session.withTransaction(async () => {
+      await ProductModel.bulkWrite(changes.map((change) => ({
+        updateOne: { filter: { _id: change.id, storeId }, update: { $set: { ...(selling ? { sellingPrice: change.sellingPrice! } : {}), ...(cost ? { costPrice: change.costPrice! } : {}) } } },
+      })), { session, ordered: true })
+      for (const change of changes) {
+        await recordAuditLog({ storeId, userId, event: 'PRODUCT_UPDATED', resourceType: 'Product', resourceId: change.id, metadata: { batch: true, ...(selling ? { sellingPrice: change.sellingPrice! } : {}), ...(cost ? { costPrice: change.costPrice! } : {}) } }, session)
+      }
+    })
+  } catch (error) {
+    console.error('Batch product update failed:', error instanceof Error ? error.message : 'Unknown error')
+    res.status(500).json({ message: 'The prices could not be changed.' })
+    return
+  } finally {
+    await session.endSession()
+  }
+  const skipped = ids.length - products.length
+  res.json({ message: `${products.length} ${products.length === 1 ? 'product' : 'products'} updated.`, updated: products.length, skipped })
+}
+
+/** Removes many products from the price list at once (the same archive as the single Archive button). */
+export async function batchArchiveProducts(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const storeId = storeIdFromRequest(req)
+  if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
+  const ids = parseBatchIds((req.body as { ids?: unknown } | undefined)?.ids)
+  if (!ids) { res.status(400).json({ message: `Choose between 1 and ${MAX_BATCH} products.` }); return }
+  const products = await ProductModel.find({ _id: { $in: ids }, storeId, status: 'active' }).select('_id').lean()
+  if (!products.length) { res.status(404).json({ message: 'None of the selected products were found.' }); return }
+  const userId = new mongoose.Types.ObjectId(req.user!.id)
+
+  const session = await mongoose.startSession()
+  try {
+    await session.withTransaction(async () => {
+      await ProductModel.updateMany({ _id: { $in: products.map((product) => product._id) }, storeId, status: 'active' }, { $set: { status: 'archived' } }, { session })
+      for (const product of products) {
+        await recordAuditLog({ storeId, userId, event: 'PRODUCT_ARCHIVED', resourceType: 'Product', resourceId: product._id, metadata: { batch: true } }, session)
+      }
+    })
+  } catch (error) {
+    console.error('Batch product archive failed:', error instanceof Error ? error.message : 'Unknown error')
+    res.status(500).json({ message: 'The products could not be removed.' })
+    return
+  } finally {
+    await session.endSession()
+  }
+  res.json({ message: `${products.length} ${products.length === 1 ? 'product' : 'products'} removed from the price list.`, archived: products.length })
 }
 
 export async function deleteProduct(req: AuthenticatedRequest, res: Response): Promise<void> {

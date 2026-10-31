@@ -1,0 +1,334 @@
+/* Selection bar, batch edit dialog, print/download dialog */
+
+.select-cell {
+  width: 44px;
+  text-align: center;
+}
+
+.select-cell input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--price-accent, #16837a);
+}
+
+tr.is-selected td {
+  background: color-mix(in srgb, var(--price-accent, #16837a) 8%, transparent);
+}
+
+.batch-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+  border: 1px solid color-mix(in srgb, var(--price-accent, #16837a) 35%, #cbd5e1);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--price-accent, #16837a) 8%, #fff);
+}
+
+.batch-bar-count {
+  margin-right: auto;
+  color: #12212b;
+  font-weight: 700;
+}
+
+.batch-bar-count button {
+  margin-left: 10px;
+  border: 0;
+  background: none;
+  color: var(--price-accent, #16837a);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.batch-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.batch-modal,
+.export-modal {
+  width: min(100%, 640px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.adjust-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.adjust-field,
+.export-group {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #dfe7f1;
+  border-radius: 10px;
+  padding: 10px 12px 12px;
+}
+
+.adjust-field legend,
+.export-group legend {
+  padding: 0 6px;
+  color: #38505a;
+  font-size: .8rem;
+  font-weight: 700;
+}
+
+.adjust-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.adjust-controls select,
+.adjust-input input,
+.export-title input,
+.export-picker-tools input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  color: #12212b;
+  font: inherit;
+}
+
+.adjust-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #38505a;
+}
+
+.adjust-input input:disabled {
+  background: #f1f5f9;
+  cursor: not-allowed;
+}
+
+.batch-preview {
+  margin-bottom: 12px;
+  border: 1px solid #dfe7f1;
+  border-radius: 10px;
+  overflow-x: auto;
+}
+
+.batch-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+}
+
+.batch-preview th,
+.batch-preview td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #edf1f2;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.batch-preview th {
+  background: #f7fafb;
+  color: #5f6b73;
+  font-size: .72rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.batch-preview tr:last-child td {
+  border-bottom: 0;
+}
+
+.batch-more {
+  margin: 0;
+  padding: 8px 12px;
+  color: #718087;
+  font-size: .8rem;
+}
+
+.export-group {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.export-choice,
+.export-chip,
+.export-picker-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #12212b;
+}
+
+.export-choice {
+  font-weight: 600;
+}
+
+.export-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding-left: 26px;
+}
+
+.export-chip {
+  font-size: .9rem;
+}
+
+.export-picker {
+  display: grid;
+  gap: 8px;
+  padding-left: 26px;
+}
+
+.export-picker-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.export-picker-tools input {
+  flex: 1 1 200px;
+}
+
+.export-picker-list {
+  max-height: 220px;
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid #dfe7f1;
+  border-radius: 10px;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.export-picker-list li {
+  padding: 5px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.export-picker-list li:last-child {
+  border-bottom: 0;
+}
+
+.export-picker-list small {
+  margin-left: auto;
+  color: #718087;
+}
+
+.export-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 4px;
+}
+
+.export-title {
+  display: grid;
+  gap: 6px;
+  color: #38505a;
+  font-size: .8rem;
+  font-weight: 700;
+}
+
+.export-fixed {
+  margin: 0;
+  color: #718087;
+  font-size: .8rem;
+}
+
+.export-two .export-chips {
+  padding-left: 0;
+}
+
+.export-count {
+  margin: 4px 0 10px;
+  color: #38505a;
+  font-weight: 600;
+}
+
+.export-modal .price-success,
+.export-modal .price-review-note,
+.batch-modal .price-review-note {
+  margin: 0 0 10px;
+}
+
+.export-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+  .adjust-grid,
+  .export-two {
+    grid-template-columns: 1fr;
+  }
+
+  .export-chips,
+  .export-picker {
+    padding-left: 0;
+  }
+}
+
+html[data-theme='dark'] .batch-bar {
+  border-color: var(--app-border);
+  background: color-mix(in srgb, var(--price-accent, #16837a) 14%, var(--app-surface));
+}
+
+html[data-theme='dark'] .batch-bar-count,
+html[data-theme='dark'] .export-choice,
+html[data-theme='dark'] .export-chip,
+html[data-theme='dark'] .export-picker-list label,
+html[data-theme='dark'] .export-count,
+html[data-theme='dark'] .adjust-input,
+html[data-theme='dark'] .adjust-field legend,
+html[data-theme='dark'] .export-group legend,
+html[data-theme='dark'] .export-title {
+  color: var(--app-text);
+}
+
+html[data-theme='dark'] .adjust-field,
+html[data-theme='dark'] .export-group,
+html[data-theme='dark'] .batch-preview,
+html[data-theme='dark'] .export-picker-list {
+  border-color: var(--app-border);
+}
+
+html[data-theme='dark'] .batch-preview th {
+  background: var(--app-surface);
+  color: var(--app-muted);
+}
+
+html[data-theme='dark'] .batch-preview th,
+html[data-theme='dark'] .batch-preview td,
+html[data-theme='dark'] .export-picker-list li {
+  border-bottom-color: var(--app-border);
+}
+
+html[data-theme='dark'] .adjust-controls select,
+html[data-theme='dark'] .adjust-input input,
+html[data-theme='dark'] .export-title input,
+html[data-theme='dark'] .export-picker-tools input {
+  border-color: var(--app-border);
+  background: #172126;
+  color: var(--app-text);
+}
+
+html[data-theme='dark'] .adjust-input input:disabled {
+  background: var(--app-surface);
+}
+
+html[data-theme='dark'] .batch-more,
+html[data-theme='dark'] .export-fixed,
+html[data-theme='dark'] .export-picker-list small {
+  color: var(--app-muted);
+}

@@ -3,7 +3,7 @@ import { Router } from 'express'
 import { generalLimit } from '../middleware/rateLimitMiddleware.js'
 import { authenticateToken, requireRole, requireStoreMembership } from '../middleware/authMiddleware.js'
 import { requirePolicyAcceptance } from '../middleware/policyMiddleware.js'
-import { bulkCreateProducts, createProduct, deleteCategory, deleteProduct, getDashboardSummary, getProducts, renameCategory, updateProduct } from '../controllers/dashboardController.js'
+import { batchArchiveProducts, batchUpdateProducts, bulkCreateProducts, createProduct, deleteCategory, deleteProduct, getDashboardSummary, getProducts, renameCategory, updateProduct } from '../controllers/dashboardController.js'
 import { checkout, inventoryCount, lookupProduct, stockIn, stockOut } from '../controllers/operationsController.js'
 
 const router = Router()
@@ -12,6 +12,8 @@ router.get('/dashboard', getDashboardSummary)
 router.get('/products', getProducts)
 router.post('/products', createProduct)
 router.post('/products/bulk', bulkCreateProducts)
+router.post('/products/batch-update', batchUpdateProducts)
+router.post('/products/batch-archive', batchArchiveProducts)
 router.patch('/products/:id', updateProduct)
 router.delete('/products/:id', deleteProduct)
 router.post('/products/barcode/lookup', lookupProduct)

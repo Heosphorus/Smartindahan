@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { storeApi, type BulkProductPayload, type ProductRecord } from '../../services/storeApi'
 import { parseBulkLine, type BulkLine } from './bulkLines'
+import { BatchEditDialog, type BatchPriceChanges } from './BatchEditDialog'
 import { CategoryManager, type CategoryRow } from './CategoryManager'
+import { ExportDialog } from './ExportDialog'
+import { productKey } from './productKey'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { lookupPublicProduct } from '../../services/openFoodFacts'
 import { BarcodeCameraScanner } from '../pos/BarcodeCameraScanner'
@@ -192,6 +195,19 @@ function ProductDeleteDialog({ product, isDeleting, error, onCancel, onConfirm }
   </div>
 }
 
+function BatchDeleteDialog({ products, isDeleting, error, onCancel, onConfirm }: { products: ProductRecord[]; isDeleting: boolean; error: string; onCancel: () => void; onConfirm: () => void }) {
+  useEscapeKey(true, onCancel)
+  const names = products.slice(0, 5).map((product) => product.name)
+  return <div className="price-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel() }}>
+    <div className="price-confirm" role="alertdialog" aria-modal="true" aria-labelledby="batch-delete-title">
+      <h3 id="batch-delete-title">Delete {products.length} {products.length === 1 ? 'product' : 'products'}?</h3>
+      <p>{names.join(', ')}{products.length > names.length ? ` and ${products.length - names.length} more` : ''} will be removed from your price list and the POS. Past sales keep their records.</p>
+      {error && <p className="price-form-error" role="alert">{error}</p>}
+      <div className="price-modal-actions"><button type="button" className="price-secondary" onClick={onCancel} disabled={isDeleting}>Cancel</button><button type="button" className="price-delete confirm" onClick={onConfirm} disabled={isDeleting}>{isDeleting ? 'Deleting…' : `Delete ${products.length} ${products.length === 1 ? 'product' : 'products'}`}</button></div>
+    </div>
+  </div>
+}
+
 export function BulkProductDialog({ categories, isSaving, error, onCancel, onSave }: { categories: string[]; isSaving: boolean; error: string; onCancel: () => void; onSave: (value: BulkState) => void }) {
   const [form, setForm] = useState(blankBulk)
   const [showPreview, setShowPreview] = useState(false)
@@ -315,6 +331,11 @@ export function PriceListPage() {
   const [editor, setEditor] = useState<EditorState | null>(null)
   const [bulk, setBulk] = useState(false)
   const [managingCategories, setManagingCategories] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [batchEditing, setBatchEditing] = useState(false)
+  const [batchDeleting, setBatchDeleting] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [isBatchSaving, setIsBatchSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ProductRecord | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -379,8 +400,10 @@ export function PriceListPage() {
   const currentPage = Math.min(page, pageCount)
   const visibleProducts = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
-  function chooseCategory(value: string) { setCategory(value); setPage(1) }
-  function chooseStock(value: StockFilter) { setStockFilter(value); setPage(1) }
+  // A selection only ever covers rows that are on screen, so it is cleared whenever the filters change.
+  function chooseCategory(value: string) { setCategory(value); setPage(1); setSelected(new Set()) }
+  function chooseStock(value: StockFilter) { setStockFilter(value); setPage(1); setSelected(new Set()) }
+  function changeSearch(value: string) { setSearch(value); setPage(1); setSelected(new Set()) }
   function chooseSort(field: SortField) {
     setSortDirection((current) => field === sortField ? (current === 'asc' ? 'desc' : 'asc') : 'asc')
     setSortField(field)
@@ -472,6 +495,51 @@ export function PriceListPage() {
     }
   }
 
+  const selectedProducts = useMemo(() => filtered.filter((product) => selected.has(productKey(product))), [filtered, selected])
+  const pageKeys = visibleProducts.map(productKey)
+  const pageAllSelected = pageKeys.length > 0 && pageKeys.every((key) => selected.has(key))
+  const pageSomeSelected = !pageAllSelected && pageKeys.some((key) => selected.has(key))
+  const BATCH_LIMIT = 500
+  function toggleProduct(key: string) {
+    setSelected((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next })
+  }
+  function togglePage() {
+    setSelected((current) => { const next = new Set(current); if (pageAllSelected) pageKeys.forEach((key) => next.delete(key)); else pageKeys.forEach((key) => next.add(key)); return next })
+  }
+
+  async function batchUpdate(changes: BatchPriceChanges) {
+    if (isBatchSaving) return
+    setIsBatchSaving(true)
+    setError('')
+    try {
+      const response = await storeApi.batchUpdateProducts(selectedProducts.map(productKey), changes)
+      setBatchEditing(false)
+      setNotice(response.message)
+      await load()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to update the prices.')
+    } finally {
+      setIsBatchSaving(false)
+    }
+  }
+
+  async function batchDelete() {
+    if (isBatchSaving) return
+    setIsBatchSaving(true)
+    setError('')
+    try {
+      const response = await storeApi.batchArchiveProducts(selectedProducts.map(productKey))
+      setBatchDeleting(false)
+      setSelected(new Set())
+      setNotice(response.message)
+      await load()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to remove the products.')
+    } finally {
+      setIsBatchSaving(false)
+    }
+  }
+
   // The category filter points at a name that may no longer exist after a rename or delete, so follow the products to the new name.
   async function changeCategory(request: Promise<{ message: string; category: string }>, from: string) {
     const response = await request
@@ -505,19 +573,33 @@ export function PriceListPage() {
     </div>
 
     <section className="price-inventory-panel" aria-label="Product inventory">
-      <div className="price-panel-heading"><div><h3>Products</h3><p>{filtered.length.toLocaleString('en-PH')} matching {filtered.length === 1 ? 'product' : 'products'}</p></div></div>
+      <div className="price-panel-heading"><div><h3>Products</h3><p>{filtered.length.toLocaleString('en-PH')} matching {filtered.length === 1 ? 'product' : 'products'}</p></div><button className="price-secondary" type="button" onClick={() => setExporting(true)} disabled={products.length === 0}>Print / download</button></div>
       <div className="price-filter-bar">
-        <label className="price-search"><span>Search</span><input aria-label="Search products by name or barcode" placeholder="Name or barcode" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} /><button type="button" aria-label="Clear product search" onClick={() => { setSearch(''); setPage(1) }} disabled={!search}>Clear</button></label>
+        <label className="price-search"><span>Search</span><input aria-label="Search products by name or barcode" placeholder="Name or barcode" value={search} onChange={(event) => changeSearch(event.target.value)} /><button type="button" aria-label="Clear product search" onClick={() => changeSearch('')} disabled={!search}>Clear</button></label>
         <label className="price-filter"><span>Category</span><select value={category} onChange={(event) => chooseCategory(event.target.value)}>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
         <label className="price-filter"><span>Stock status</span><select value={stockFilter} onChange={(event) => chooseStock(event.target.value as StockFilter)}><option value="all">All stock</option><option value="in-stock">In Stock</option><option value="low-stock">Low Stock</option><option value="out-of-stock">Out of Stock</option></select></label>
       </div>
 
+      {selectedProducts.length > 0 && <div className="batch-bar" role="region" aria-label="Selected products">
+        <span className="batch-bar-count">{selectedProducts.length} selected
+          {selectedProducts.length < filtered.length && <button type="button" onClick={() => setSelected(new Set(filtered.map(productKey)))}>Select all {filtered.length} matching</button>}
+          <button type="button" onClick={() => setSelected(new Set())}>Clear</button>
+        </span>
+        {selectedProducts.length > BATCH_LIMIT && <span className="price-review-note" role="status">Batch edit and delete work on up to {BATCH_LIMIT} products at a time.</span>}
+        <span className="batch-bar-actions">
+          <button type="button" className="price-secondary" onClick={() => setBatchEditing(true)} disabled={selectedProducts.length > BATCH_LIMIT}>Edit prices</button>
+          <button type="button" className="price-secondary" onClick={() => setExporting(true)}>Print / download</button>
+          <button type="button" className="price-delete" onClick={() => setBatchDeleting(true)} disabled={selectedProducts.length > BATCH_LIMIT}>Delete</button>
+        </span>
+      </div>}
+
       {isLoading ? <div className="price-state" role="status"><strong>Loading products…</strong><span>Getting the latest store inventory.</span></div>
         : error && products.length === 0 ? <div className="price-state"><strong>Products could not be loaded</strong><span>Use Retry loading to try again.</span></div>
           : products.length === 0 ? <div className="price-state"><strong>Your price list is empty</strong><span>Add a product to start tracking prices and stock.</span><button className="price-primary" type="button" onClick={() => openEditor()}>Add first product</button></div>
-            : filtered.length === 0 ? <div className="price-state"><strong>No matching products</strong><span>Try another search or clear your filters.</span><button className="price-secondary" type="button" onClick={() => { setSearch(''); chooseCategory('All'); chooseStock('all') }}>Clear filters</button></div>
+            : filtered.length === 0 ? <div className="price-state"><strong>No matching products</strong><span>Try another search or clear your filters.</span><button className="price-secondary" type="button" onClick={() => { changeSearch(''); chooseCategory('All'); chooseStock('all') }}>Clear filters</button></div>
               : <div className="price-table-scroll"><table className="price-data-table">
                 <thead><tr>
+                  <th scope="col" className="select-cell"><input type="checkbox" aria-label="Select all products on this page" checked={pageAllSelected} ref={(element) => { if (element) element.indeterminate = pageSomeSelected }} onChange={togglePage} /></th>
                   <th scope="col">{sortButton('Product', 'name')}</th><th scope="col">{sortButton('Category', 'category')}</th>
                   <th scope="col" className="numeric-cell">{sortButton('Cost / unit', 'costPrice')}</th><th scope="col" className="numeric-cell">{sortButton('Selling price', 'sellingPrice')}</th>
                   <th scope="col" className="numeric-cell">{sortButton('Potential gross profit', 'profit')}</th><th scope="col">{sortButton('Stock', 'currentStock')}</th><th scope="col">Status</th><th scope="col">Actions</th>
@@ -528,7 +610,9 @@ export function PriceListPage() {
                   const hasSellingPrice = typeof product.sellingPrice === 'number' && Number.isFinite(product.sellingPrice)
                   const priceFlag = !hasCost || !hasSellingPrice || product.costPrice === 0 || product.sellingPrice === 0
                   const profit = hasCost && hasSellingPrice ? formatPeso(product.sellingPrice - product.costPrice) : 'Review required'
-                  return <tr key={product._id ?? product.id}>
+                  const key = productKey(product)
+                  return <tr key={key} className={selected.has(key) ? 'is-selected' : undefined}>
+                    <td className="select-cell"><input type="checkbox" aria-label={'Select ' + product.name} checked={selected.has(key)} onChange={() => toggleProduct(key)} /></td>
                     <td className="product-name-cell"><strong>{product.name}</strong><small>{product.barcode ? 'Barcode: ' + product.barcode : 'No barcode recorded'}</small></td>
                     <td><span className="category-label">{product.category}</span></td>
                     <td className="numeric-cell">{displayPrice(product.costPrice)}</td>
@@ -546,6 +630,9 @@ export function PriceListPage() {
 
     {editor?.visible && <ProductEditor key={editor.product?._id ?? editor.product?.id ?? 'new-product'} title={editor.product ? 'Edit product' : 'Add product'} categories={categories.filter((item) => item !== 'All')} value={editor.form} isSaving={isSaving} error={error} onCancel={() => setEditor(null)} onClose={(form) => setEditor((current) => current ? { ...current, form, visible: false } : current)} onSave={(form) => void save(form)} />}
     {managingCategories && <CategoryManager categories={categoryRows} onRename={renameCategory} onDelete={deleteCategory} onClose={() => setManagingCategories(false)} />}
+    {batchEditing && <BatchEditDialog products={selectedProducts} isSaving={isBatchSaving} error={error} onCancel={() => setBatchEditing(false)} onSave={(changes) => void batchUpdate(changes)} />}
+    {batchDeleting && <BatchDeleteDialog products={selectedProducts} isDeleting={isBatchSaving} error={error} onCancel={() => setBatchDeleting(false)} onConfirm={() => void batchDelete()} />}
+    {exporting && <ExportDialog products={products} categories={categories.filter((item) => item !== 'All')} initialCategory={category} initialPicked={selectedProducts.map(productKey)} onClose={() => setExporting(false)} />}
     {bulk && <BulkProductDialog categories={categories} isSaving={isBulkSaving} error={error} onCancel={() => setBulk(false)} onSave={(value) => void bulkSave(value)} />}
     {deleteTarget && <ProductDeleteDialog product={deleteTarget} isDeleting={isDeleting} error={error} onCancel={() => setDeleteTarget(null)} onConfirm={() => void remove()} />}
   </section>
