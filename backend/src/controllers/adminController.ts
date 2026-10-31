@@ -10,6 +10,7 @@ import type { AuthenticatedRequest } from '../middleware/authMiddleware.js'
 import { AuditLogModel } from '../models/AuditLog.js'
 import { validatePasswordStrength } from '../services/authService.js'
 import { parseObjectId } from '../utils/objectId.js'
+import { isEmail } from '../utils/validation.js'
 
 export async function getAdminStats(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -92,8 +93,7 @@ export async function changeUserEmail(req: AuthenticatedRequest, res: Response):
     }
 
     const normalizedEmail = typeof newEmail === 'string' ? newEmail.trim().toLowerCase() : ''
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(normalizedEmail)) {
+    if (!isEmail(normalizedEmail)) {
       res.status(400).json({ message: 'Invalid email format' })
       return
     }

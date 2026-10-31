@@ -11,14 +11,14 @@ import {
   submitPrivacyRequest,
 } from '../controllers/privacyController.js'
 import { authenticateToken } from '../middleware/authMiddleware.js'
-import { rateLimit } from '../middleware/rateLimitMiddleware.js'
+import { clientKey, generalLimit, rateLimit } from '../middleware/rateLimitMiddleware.js'
 
 const router = Router()
-const limit = (name: string, max: number, windowMs: number) => rateLimit(max, windowMs, (req: Request) => `privacy-${name}:${req.ip ?? 'unknown'}`)
+const limit = (name: string, max: number, windowMs: number) => rateLimit(max, windowMs, (req: Request) => `privacy-${name}:${clientKey(req)}`)
 
 // Deliberately NOT behind the policy-acceptance gate: someone who declines updated terms can still read their status,
 // download their data, send a request and ask for deletion.
-router.use(authenticateToken)
+router.use(generalLimit('privacy', 300), authenticateToken)
 router.get('/status', getPrivacyStatus)
 router.get('/overview', getPrivacyOverview)
 router.post('/consents', limit('consent', 20, 15 * 60 * 1000), acceptPolicy)

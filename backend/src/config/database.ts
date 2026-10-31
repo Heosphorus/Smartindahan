@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 
 import { env, validateEnvironment } from './env.js'
+import { isPlaceholderMongoUri } from './mongoUri.js'
 
 // Serverless instances multiply the pool, so keep it small there. Atlas free tiers allow 500 connections.
 const isServerless = Boolean(process.env.VERCEL)
@@ -43,7 +44,7 @@ function registerConnectionListeners(): void {
 export async function connectDatabase(): Promise<void> {
   const mongoUri = env.mongoUri.trim()
 
-  if (!mongoUri || mongoUri.includes('DATABASE_USER') || mongoUri.includes('<') || mongoUri.includes('example.com')) {
+  if (!mongoUri || isPlaceholderMongoUri(mongoUri)) {
     throw new Error('MONGODB_URI is missing or still contains a placeholder. Update backend/.env with the real Atlas connection string.')
   }
 

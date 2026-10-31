@@ -22,6 +22,7 @@ import { currentPolicy, recordConsent } from '../services/policyService.js'
 import { sendPasswordResetEmail, sendVerificationEmail } from '../services/emailService.js'
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.js'
 import { parseObjectId } from '../utils/objectId.js'
+import { isEmail } from '../utils/validation.js'
 
 const OTP_MAX_ATTEMPTS = 5
 const OTP_EXPIRES_MS = 5 * 60 * 1000
@@ -125,7 +126,7 @@ export async function register(req: Request, res: Response): Promise<void> {
   }
 
   const email = payload.email!.trim().toLowerCase()
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!isEmail(email)) {
     res.status(400).json({ message: 'Please enter a valid email address.' })
     return
   }

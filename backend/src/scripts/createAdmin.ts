@@ -5,14 +5,25 @@ import { connectDatabase } from '../config/database.js'
 import { validatePasswordStrength } from '../services/authService.js'
 import { UserModel } from '../models/User.js'
 
+/** A problem with the ADMIN_* settings, identified by a code so the text printed never comes from the password itself. */
+class SetupError extends Error {
+  constructor(readonly reason: 'missing-password' | 'weak-password') {
+    super(reason)
+  }
+}
+
+const SETUP_MESSAGES = {
+  'missing-password': 'Set ADMIN_PASSWORD in the environment before creating an admin user.',
+  'weak-password': 'ADMIN_PASSWORD is too weak: use at least 8 characters with an uppercase letter, a lowercase letter and a number.',
+} as const
+
 async function createAdminUser(): Promise<void> {
   try {
     await connectDatabase()
 
     const adminPassword = process.env.ADMIN_PASSWORD
-    if (!adminPassword) throw new Error('Set ADMIN_PASSWORD in the environment before creating an admin user.')
-    const passwordCheck = validatePasswordStrength(adminPassword)
-    if (!passwordCheck.isValid) throw new Error(passwordCheck.message)
+    if (!adminPassword) throw new SetupError('missing-password')
+    if (!validatePasswordStrength(adminPassword).isValid) throw new SetupError('weak-password')
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@sarismart.com'
     const firstName = process.env.ADMIN_FIRSTNAME || 'Admin'
     const lastName = process.env.ADMIN_LASTNAME || 'User'
@@ -50,7 +61,8 @@ async function createAdminUser(): Promise<void> {
 
     console.log(`Admin user created successfully with role ${adminUser.role}.`)
   } catch (error) {
-    console.error('Unable to create admin user:', error instanceof Error ? error.name : 'UnknownError')
+    // Only fixed text is printed, so nothing derived from the password or the database can reach the log.
+    console.error(error instanceof SetupError ? SETUP_MESSAGES[error.reason] : 'Unable to create the admin user. Check the database connection and the ADMIN_* settings.')
     process.exitCode = 1
   } finally {
     await mongoose.disconnect()

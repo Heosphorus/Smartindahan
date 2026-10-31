@@ -1,39 +1,23 @@
-import type { NextFunction, Request, Response } from 'express'
+import type { Request } from 'express'
+import { ipKeyGenerator, rateLimit as createRateLimiter } from 'express-rate-limit'
 
-const attempts = new Map<string, { count: number; firstRequestAt: number }>()
+/**
+ * The caller's address as a rate-limit key. IPv6 clients are grouped by network prefix, because one household or phone
+ * is handed a whole range of addresses and could otherwise dodge the limit by switching address.
+ */
+export const clientKey = (req: Request): string => ipKeyGenerator(req.ip ?? 'unknown')
 
 // Counters live in this process only, so on serverless hosts each warm instance keeps its own window.
-// Expired entries are dropped opportunistically so the map cannot grow without bound.
-function pruneExpired(now: number, windowMs: number): void {
-  if (attempts.size < 5000) return
-  for (const [key, entry] of attempts) if (now - entry.firstRequestAt > windowMs) attempts.delete(key)
+export function rateLimit(maxRequests: number, windowMs: number, keyBuilder: (req: Request) => string = clientKey) {
+  return createRateLimiter({
+    windowMs,
+    limit: maxRequests,
+    keyGenerator: keyBuilder,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    handler: (_req, res) => { res.status(429).json({ message: 'Too many requests. Please try again later.' }) },
+  })
 }
 
-export function rateLimit(maxRequests: number, windowMs: number, keyBuilder?: (req: Request) => string) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const key = keyBuilder ? keyBuilder(req) : req.ip ?? 'global'
-    const now = Date.now()
-    pruneExpired(now, windowMs)
-    const current = attempts.get(key)
-
-    if (!current) {
-      attempts.set(key, { count: 1, firstRequestAt: now })
-      next()
-      return
-    }
-
-    if (now - current.firstRequestAt > windowMs) {
-      attempts.set(key, { count: 1, firstRequestAt: now })
-      next()
-      return
-    }
-
-    if (current.count >= maxRequests) {
-      res.status(429).json({ message: 'Too many requests. Please try again later.' })
-      return
-    }
-
-    attempts.set(key, { count: current.count + 1, firstRequestAt: current.firstRequestAt })
-    next()
-  }
-}
+/** A generous per-client ceiling for routes that have no tighter limit of their own; it stops floods, not normal use. */
+export const generalLimit = (name: string, maxRequests: number) => rateLimit(maxRequests, 15 * 60 * 1000, (req) => `${name}:${clientKey(req)}`)

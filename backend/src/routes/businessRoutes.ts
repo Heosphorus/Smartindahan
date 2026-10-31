@@ -1,11 +1,12 @@
 import { Router } from 'express'
 
+import { generalLimit } from '../middleware/rateLimitMiddleware.js'
 import { authenticateToken, requireRole, requireStoreMembership } from '../middleware/authMiddleware.js'
 import { requirePolicyAcceptance } from '../middleware/policyMiddleware.js'
 import { createCustomer, createExpense, createSupplier, deleteCustomer, deleteExpense, deleteSupplier, getSettings, listAlerts, listCustomers, listExpenses, listSales, listSuppliers, restockInsights, salesReport, updateCustomer, updateExpense, updateSettings, updateSupplier } from '../controllers/businessController.js'
 
 const router = Router()
-router.use(authenticateToken, requireRole('STORE_OWNER'), requireStoreMembership, requirePolicyAcceptance)
+router.use(generalLimit('business', 3000), authenticateToken, requireRole('STORE_OWNER'), requireStoreMembership, requirePolicyAcceptance)
 router.get('/sales', listSales)
 router.get('/reports/sales', salesReport)
 router.get('/customers', listCustomers)

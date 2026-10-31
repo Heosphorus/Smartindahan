@@ -14,6 +14,19 @@ export function isCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= MAX_COUNT
 }
 
+/**
+ * Checks for one "@" with text before it and a dotted domain after it, and no whitespace. It avoids a regular expression
+ * on purpose: patterns like /^[^\s@]+@[^\s@]+\.[^\s@]+$/ backtrack polynomially on long inputs such as "a@" + "." x 10000.
+ */
+export function isEmail(value: string): boolean {
+  if (value.length > 254 || /\s/.test(value)) return false
+  const at = value.indexOf('@')
+  if (at < 1 || at !== value.lastIndexOf('@')) return false
+  const domain = value.slice(at + 1)
+  const lastDot = domain.lastIndexOf('.')
+  return lastDot > 0 && lastDot < domain.length - 1
+}
+
 /** A trimmed, non-empty string no longer than `maxLength`, or null when the value is unusable. */
 export function cleanText(value: unknown, maxLength = 64): string | null {
   if (typeof value !== 'string') return null

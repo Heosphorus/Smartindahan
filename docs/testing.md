@@ -25,8 +25,10 @@ npm test --prefix backend
 - `restock.test.ts` – restock suggestions: days of stock left, suggested quantity and cost, ordering by urgency, minimum-stock rule, slow movers, low confidence for new products, and the API using only the signed-in store's own sales and stock.
 - `bulk.test.ts` – bulk add products: a price per product with a shared default for the rest, shared stock and brand, cost optional (stored as 0), one bad price rejects the batch, starting stock recorded in stock history and audit log, old names-only requests still work, bad numbers and over-long names rejected with nothing created, only the signed-in store is written.
 - `categories.test.ts` – renaming and deleting categories: only the signed-in store's products change, archived products stay in step, a lookalike name merges into the existing category, delete moves products (never removes them) to Uncategorized or a chosen category, bad or unknown names are rejected, changes are audited.
+- `rateLimit.test.ts` – JSON 429 over the limit, standard rate-limit headers, the general limiter, and IPv6 clients grouped by network prefix.
+- `mongoUri.test.ts` – placeholder connection-string detection compares the real host, so look-alike hosts and passwords containing "example.com" are not mistaken for it.
 - `config.test.ts` – production environment validation (weak or missing secrets, non-HTTPS origins, email mode).
-- `authMiddleware.test.ts`, `storeTime.test.ts`, `validation.test.ts` – unit tests.
+- `authMiddleware.test.ts`, `storeTime.test.ts`, `validation.test.ts` – unit tests (`validation.test.ts` includes the email check and a hostile-input timing test).
 - `tenantIsolation.test.ts` – legacy test that needs a real database; skipped unless `MONGODB_TEST_URI` is set (use a disposable database).
 
 The first run downloads a MongoDB binary (about 800 MB) into `backend/node_modules/.cache/mongodb-memory-server`; later runs reuse it. In CI the download happens on every run unless the cache is kept.

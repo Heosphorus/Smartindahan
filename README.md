@@ -143,7 +143,7 @@ The app uses `Authorization: Bearer` tokens kept in `localStorage`, not cookies,
 - **Credit (utang) is not implemented.** Customers can be stored with a credit limit, but no sale can be put on credit, there is no payment ledger, and "Outstanding utang" stays at ₱0. The checkout API rejects `Utang`.
 - The POS always records payments as Cash (the API also accepts GCash and Maya, but the screen has no payment picker yet).
 - No purchase-order/supplier-delivery records, discounts, change calculator, inventory history screen or date-range analytics filters.
-- Rate limiting is in memory, per server instance; on Vercel each warm instance counts separately. Account lockout and OTP attempt limits are stored in the database and are not affected.
+- Rate limiting uses `express-rate-limit` with in-memory counters, per server instance; on Vercel each warm instance counts separately. Sign-in, registration and password routes have tight limits, and every other API router has a generous per-client ceiling. Account lockout and OTP attempt limits are stored in the database and are not affected.
 - Text inputs are limited to 64 characters (enforced in the UI and API).
 - Sessions are bearer tokens in `localStorage` (valid up to 7 days, revoked on password change/reset). An XSS bug would expose them; the app renders no raw HTML.
 - The app currently stores data in whatever database the connection string names. If `MONGODB_URI` has no database name in its path, MongoDB uses `test`. Existing data may live there; add a name only after migrating it.

@@ -9,10 +9,12 @@ import {
 } from '../controllers/adminController.js'
 import { listPrivacyRequests, publishPolicyVersion, updatePrivacyRequest } from '../controllers/adminPrivacyController.js'
 import { authenticateToken, requireRole } from '../middleware/authMiddleware.js'
+import { generalLimit } from '../middleware/rateLimitMiddleware.js'
 
 const router = Router()
 
 // All admin routes require authentication and ADMIN role
+router.use(generalLimit('admin', 600))
 router.get('/stats', authenticateToken, requireRole('ADMIN'), getAdminStats)
 router.get('/users', authenticateToken, requireRole('ADMIN'), getAllUsers)
 router.post('/users/password', authenticateToken, requireRole('ADMIN'), changeUserPassword)
