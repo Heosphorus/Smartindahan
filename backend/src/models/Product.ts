@@ -13,12 +13,17 @@ const productSchema = new Schema({
   sellingPrice: { type: Number, required: true, min: 0 },
   currentStock: { type: Number, required: true, min: 0, default: 0 },
   minStock: { type: Number, required: true, min: 0, default: 0 },
+  /** The unit the product is sold and counted in; stock is always kept in this unit. */
   unit: { type: String, required: true, default: 'piece' },
+  /** Optional: the unit it is bought in (for example "pack") and how many selling units are in one. Both are set, or neither. */
+  purchaseUnit: { type: String, trim: true },
+  unitsPerPurchaseUnit: { type: Number, min: 2, max: 100000 },
   status: { type: String, enum: ['active', 'archived'], default: 'active' },
 }, { timestamps: true })
 
 productSchema.index({ storeId: 1, barcode: 1 }, { unique: true, partialFilterExpression: { barcode: { $type: 'string' } } })
 productSchema.index({ storeId: 1, name: 1 })
+productSchema.index({ storeId: 1, status: 1, currentStock: 1 })
 productSchema.index({ storeId: 1, sku: 1 }, { partialFilterExpression: { sku: { $type: 'string' } } })
 
 export type ProductDocument = InferSchemaType<typeof productSchema>

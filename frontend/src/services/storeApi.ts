@@ -45,7 +45,8 @@ export const storeApi = {
   deleteProduct: (id: string) => storeRequest<{ message: string }>(`/products/${id}`, undefined, 'DELETE'),
   lookupProduct: (rawValue: string) => storeRequest<{ found: boolean; product?: ProductRecord }>(`/products/barcode/lookup`, { rawValue }),
   checkout: (items: Array<{ productId: string; quantity: number }>, paymentMethod = 'Cash', idempotencyKey?: string) => storeRequest<{ sale: { code: string; total: number; profit: number } }>('/sales/checkout', { items, paymentMethod, ...(idempotencyKey ? { idempotencyKey } : {}) }),
-  inventoryCount: (productId: string, scannedQuantity: number) => storeRequest<{ message: string }>('/inventory/count', { counts: [{ productId, scannedQuantity }] }),
+  /** Records a counted quantity; `expectedQuantity` is what the person saw, so sales made since then are kept. */
+  inventoryCount: (productId: string, scannedQuantity: number, expectedQuantity?: number) => storeRequest<{ message: string }>('/inventory/count', { counts: [{ productId, scannedQuantity, ...(expectedQuantity !== undefined ? { expectedQuantity } : {}) }] }),
 }
 
 /** `set` is an exact price; `percent` and `amount` are added to the current price (negative values lower it). */
@@ -81,4 +82,7 @@ export type ProductRecord = {
   currentStock: number
   minStock: number
   unit?: string
+  /** The unit it is bought in (for example "pack") and how many selling units are in one; both or neither. */
+  purchaseUnit?: string
+  unitsPerPurchaseUnit?: number
 }

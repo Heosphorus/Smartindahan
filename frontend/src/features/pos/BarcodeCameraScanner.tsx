@@ -20,11 +20,16 @@ function cameraErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Unable to start barcode scanning. Enter the barcode manually instead.'
 }
 
-export function BarcodeCameraScanner({ onDetected, onClose }: { onDetected: (barcode: string) => void; onClose: () => void }) {
+/** The same code is ignored for this long after it was read, so holding a barcode in view counts it once. */
+const REPEAT_IGNORE_MS = 1500
+
+/** With `continuous` the camera stays open after each read (for counting item by item); otherwise it closes after the first. */
+export function BarcodeCameraScanner({ onDetected, onClose, continuous = false }: { onDetected: (barcode: string) => void; onClose: () => void; continuous?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const controlsRef = useRef<IScannerControls | null>(null)
   const detectedRef = useRef(false)
+  const lastReadRef = useRef({ code: '', time: 0 })
   const [error, setError] = useState('')
   const [scanStatus, setScanStatus] = useState('Requesting camera access…')
   useEscapeKey(true, onClose)
@@ -33,6 +38,23 @@ export function BarcodeCameraScanner({ onDetected, onClose }: { onDetected: (bar
     let cancelled = false
     let nativeTimer: number | undefined
     let fallbackTimer: number | undefined
+    let readOnce = false
+
+    /** Hands a read to the page. Returns false when it was a repeat of a code read a moment ago. */
+    const accept = (code: string): boolean => {
+      if (continuous) {
+        const now = Date.now()
+        if (lastReadRef.current.code === code && now - lastReadRef.current.time < REPEAT_IGNORE_MS) return false
+        lastReadRef.current = { code, time: now }
+        setScanStatus(`Scanned ${code}. Scan the next item, or close when finished.`)
+      } else {
+        detectedRef.current = true
+        setScanStatus('Barcode detected. Looking it up…')
+      }
+      readOnce = true
+      onDetected(code)
+      return true
+    }
 
     const startZxing = async (stream: MediaStream) => {
       if (cancelled || detectedRef.current) return
@@ -56,9 +78,7 @@ export function BarcodeCameraScanner({ onDetected, onClose }: { onDetected: (bar
         ]
         const controls = await reader.decodeFromStream(stream, videoRef.current ?? undefined, (result) => {
           if (!result || detectedRef.current) return
-          detectedRef.current = true
-          setScanStatus('Barcode detected. Looking it up…')
-          onDetected(result.getText())
+          accept(result.getText())
         })
         if (cancelled || detectedRef.current) controls.stop()
         else {
@@ -109,10 +129,9 @@ export function BarcodeCameraScanner({ onDetected, onClose }: { onDetected: (bar
                 try {
                   const results = await detector.detect(video)
                   const rawValue = results.find((result) => result.rawValue.trim())?.rawValue.trim()
-                  if (rawValue) {
-                    detectedRef.current = true
-                    setScanStatus('Barcode detected. Looking it up…')
-                    onDetected(rawValue)
+                  if (rawValue && accept(rawValue)) {
+                    if (!continuous) return
+                    nativeTimer = window.setTimeout(() => void detectFrame(), 600)
                     return
                   }
                 } catch {
@@ -125,7 +144,7 @@ export function BarcodeCameraScanner({ onDetected, onClose }: { onDetected: (bar
               }
               void detectFrame()
               fallbackTimer = window.setTimeout(() => {
-                if (!cancelled && !detectedRef.current) {
+                if (!cancelled && !detectedRef.current && !readOnce) {
                   setScanStatus('Trying compatibility scanner…')
                   void startZxing(stream)
                 }
@@ -152,7 +171,7 @@ export function BarcodeCameraScanner({ onDetected, onClose }: { onDetected: (bar
       streamRef.current?.getTracks().forEach((track) => track.stop())
       streamRef.current = null
     }
-  }, [onDetected])
+  }, [onDetected, continuous])
 
   return <div className="pos-camera-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
     <section className="pos-camera-dialog" role="dialog" aria-modal="true" aria-labelledby="pos-camera-title">

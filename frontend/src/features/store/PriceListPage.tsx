@@ -9,13 +9,14 @@ import { productKey } from './productKey'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { lookupPublicProduct } from '../../services/openFoodFacts'
 import { BarcodeCameraScanner } from '../pos/BarcodeCameraScanner'
+import '../inventory/Inventory.css'
 import './PriceListPage.css'
 import './PriceListRedesign.css'
 import '../pos/POSFlow.css'
 
 const PAGE_SIZE = 10
 const API_PAGE_SIZE = 100
-const blankForm = { name: '', category: '', brand: '', barcode: '', costPrice: '', sellingPrice: '', currentStock: '', minStock: '', unit: 'piece' }
+const blankForm = { name: '', category: '', brand: '', barcode: '', costPrice: '', sellingPrice: '', currentStock: '', minStock: '', unit: 'piece', purchaseUnit: '', packSize: '' }
 type ProductForm = typeof blankForm
 type EditorState = { product?: ProductRecord; form: ProductForm; visible: boolean }
 /** What the bulk dialog hands back: each product with its own price if given, plus the values shared by every product. */
@@ -43,6 +44,8 @@ function toForm(product?: ProductRecord): ProductForm {
     currentStock: String(product.currentStock ?? ''),
     minStock: String(product.minStock ?? ''),
     unit: product.unit ?? 'piece',
+    purchaseUnit: product.purchaseUnit ?? '',
+    packSize: product.unitsPerPurchaseUnit ? String(product.unitsPerPurchaseUnit) : '',
   } : { ...blankForm }
 }
 
@@ -148,6 +151,11 @@ function ProductEditor({ value, title, categories, isSaving, error, onCancel, on
       setValidationError('Minimum stock must be a non-negative whole number.')
       return
     }
+    const wantsPack = form.purchaseUnit.trim() !== '' || form.packSize.trim() !== ''
+    if (wantsPack && (!form.purchaseUnit.trim() || !/^d+$/.test(form.packSize.trim()) || Number(form.packSize) < 2 || Number(form.packSize) > 100000)) {
+      setValidationError('For a pack, enter its name (such as pack) and how many units are in it (a whole number from 2 to 100,000), or leave both empty.')
+      return
+    }
     onSave({ ...form, category: matchCategory(categories, form.category) })
   }
 
@@ -170,6 +178,10 @@ function ProductEditor({ value, title, categories, isSaving, error, onCancel, on
         <label>Current stock<input type="number" min="0" step="1" inputMode="numeric" value={form.currentStock} onChange={(event) => update('currentStock', event.target.value)} /></label>
         <label>Low stock alert at<input type="number" min="0" step="1" inputMode="numeric" value={form.minStock} onChange={(event) => update('minStock', event.target.value)} /></label>
         <label><span>Unit <span className="required-mark" aria-hidden="true">*</span></span><input value={form.unit} onChange={(event) => update('unit', event.target.value)} required /></label>
+        <fieldset className="price-form-wide inv-pack"><legend>Bought in packs? (optional)</legend>
+          <label>Pack name<input value={form.purchaseUnit} maxLength={32} onChange={(event) => update('purchaseUnit', event.target.value)} placeholder="e.g. pack" /></label>
+          <label>{form.unit.trim() || 'Units'} in one pack<input type="number" min="2" step="1" inputMode="numeric" value={form.packSize} onChange={(event) => update('packSize', event.target.value)} placeholder="e.g. 24" /></label>
+        </fieldset>
       </div>
       {priceNeedsReview && <p className="price-review-note" role="status">A zero cost or selling price is allowed, but review it before saving if it was entered by mistake.</p>}
       {validationError && <p className="price-form-error" role="alert">{validationError}</p>}
@@ -429,6 +441,8 @@ export function PriceListPage() {
       initialStock: form.currentStock === '' ? 0 : Number(form.currentStock),
       minStock: form.minStock === '' ? 0 : Number(form.minStock),
       unit: form.unit.trim(),
+      purchaseUnit: form.purchaseUnit.trim(),
+      unitsPerPurchaseUnit: form.packSize.trim() === '' ? '' : Number(form.packSize),
     }
     const wasEditing = Boolean(editor?.product)
     try {
@@ -438,8 +452,9 @@ export function PriceListPage() {
         await storeApi.updateProduct(productId, {
           name: payload.name, category: payload.category, brand: payload.brand, barcode: payload.barcode,
           costPrice: payload.costPrice, sellingPrice: payload.sellingPrice, minStock: payload.minStock, unit: payload.unit,
+          purchaseUnit: payload.purchaseUnit, unitsPerPurchaseUnit: payload.unitsPerPurchaseUnit,
         })
-        if (payload.currentStock !== originalStock) await storeApi.inventoryCount(productId, payload.currentStock)
+        if (payload.currentStock !== originalStock) await storeApi.inventoryCount(productId, payload.currentStock, originalStock)
       } else {
         await storeApi.addProduct(payload)
       }

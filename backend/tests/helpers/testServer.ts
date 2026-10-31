@@ -27,7 +27,8 @@ let baseUrl = ''
 
 /** Starts an in-memory single-node replica set (required for transactions) and the Express app on a free port. */
 export async function startTestServer(): Promise<void> {
-  replicaSet = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: 'wiredTiger' } })
+  // Every test file starts its own server, so a loaded machine can need longer than the 10-second default to boot one.
+  replicaSet = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: 'wiredTiger' }, instanceOpts: [{ launchTimeout: 60_000 }] })
   await mongoose.connect(replicaSet.getUri('smartindahan_test'))
   await Promise.all([UserModel.init(), ProductModel.init(), SaleModel.init(), ConsentRecordModel.init(), PolicyVersionModel.init()])
   resetPolicySeedState()

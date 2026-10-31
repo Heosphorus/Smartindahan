@@ -11,8 +11,17 @@ const inventoryTransactionSchema = new Schema({
   referenceId: { type: String },
   reason: { type: String },
   note: { type: String },
+  /** Cost of one selling unit for stock that was bought, so the price paid is never lost when the product cost changes later. */
+  unitCost: { type: Number, min: 0 },
+  supplierId: { type: Schema.Types.ObjectId, ref: 'Supplier' },
+  purchaseId: { type: Schema.Types.ObjectId, ref: 'Purchase' },
+  countId: { type: Schema.Types.ObjectId, ref: 'InventoryCount' },
+  /** Set when the client supplied a retry key, so a repeated request is recognised instead of applied twice. */
+  idempotencyKey: { type: String },
 }, { timestamps: { createdAt: true, updatedAt: false } })
 
 inventoryTransactionSchema.index({ storeId: 1, createdAt: -1 })
+inventoryTransactionSchema.index({ storeId: 1, productId: 1, createdAt: -1 })
+inventoryTransactionSchema.index({ storeId: 1, idempotencyKey: 1, productId: 1 }, { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } })
 export type InventoryTransactionDocument = InferSchemaType<typeof inventoryTransactionSchema>
 export const InventoryTransactionModel = model('InventoryTransaction', inventoryTransactionSchema)

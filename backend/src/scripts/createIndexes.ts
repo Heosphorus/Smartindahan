@@ -6,11 +6,13 @@ import { ConsentRecordModel } from '../models/ConsentRecord.js'
 import { CustomerModel } from '../models/Customer.js'
 import { EmailVerificationModel } from '../models/EmailVerification.js'
 import { ExpenseModel } from '../models/Expense.js'
+import { InventoryCountModel } from '../models/InventoryCount.js'
 import { InventoryTransactionModel } from '../models/InventoryTransaction.js'
 import { PasswordResetModel } from '../models/PasswordReset.js'
 import { PolicyVersionModel } from '../models/PolicyVersion.js'
 import { PrivacyRequestModel } from '../models/PrivacyRequest.js'
 import { ProductModel } from '../models/Product.js'
+import { PurchaseModel } from '../models/Purchase.js'
 import { RevokedTokenModel } from '../models/RevokedToken.js'
 import { SaleModel } from '../models/Sale.js'
 import { SupplierModel } from '../models/Supplier.js'
@@ -28,7 +30,9 @@ async function createDeclaredIndexes(): Promise<void> {
       CustomerModel.createIndexes(),
       EmailVerificationModel.createIndexes(),
       ExpenseModel.createIndexes(),
+      InventoryCountModel.createIndexes(),
       InventoryTransactionModel.createIndexes(),
+      PurchaseModel.createIndexes(),
       PasswordResetModel.createIndexes(),
       ProductModel.createIndexes(),
       SaleModel.createIndexes(),

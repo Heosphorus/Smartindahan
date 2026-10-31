@@ -4,6 +4,7 @@ import { storeApi, type DashboardSummary } from '../../services/storeApi'
 import { authApi } from '../../services/authApi'
 import { AlertsPage, CustomersPage, ExpensesPage, ReportsPage, SalesPage, SettingsPage, SuppliersPage } from '../business/BusinessPages'
 import { PriceListPage } from './PriceListPage'
+import { InventoryPage } from '../inventory/InventoryPage'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import './DashboardControls.css'
 
@@ -49,7 +50,7 @@ export function StoreOperationsDemo() {
     : 'M0 190 L760 190'
   const chartAreaPath = `${chartPath} L760 220 L0 220 Z`
 
-  const navItems = ['Dashboard', 'POS', 'Price List', 'Sales', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Alerts', 'Settings']
+  const navItems = ['Dashboard', 'POS', 'Inventory', 'Price List', 'Sales', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Alerts', 'Settings']
 
   const handleNavigation = (item: string) => {
     setActiveNav(item)
@@ -114,7 +115,8 @@ export function StoreOperationsDemo() {
         {activeNav === 'Customers' && <CustomersPage />}
         {activeNav === 'Suppliers' && <SuppliersPage />}
         {activeNav === 'Reports' && <ReportsPage />}
-          {activeNav === 'Price List' && <PriceListPage />}
+        {activeNav === 'Inventory' && <InventoryPage />}
+        {activeNav === 'Price List' && <PriceListPage />}
         {activeNav === 'Expenses' && <ExpensesPage />}
         {activeNav === 'Alerts' && <AlertsPage />}
         {activeNav === 'Settings' && <SettingsPage />}

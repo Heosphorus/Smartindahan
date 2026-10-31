@@ -12,6 +12,7 @@ import { parsePagination } from '../utils/pagination.js'
 import { parseObjectId } from '../utils/objectId.js'
 import { applyAdjustment, parseAdjustment } from '../utils/priceAdjustment.js'
 import { pickRequestFields } from '../utils/requestFields.js'
+import { barcodeVariants, escapeRegex } from '../utils/inventory.js'
 import { cleanText, isCount, isMoney } from '../utils/validation.js'
 import { STORE_TIMEZONE, startOfStoreDay, startOfStoreMonth, storeDateRange } from '../utils/storeTime.js'
 
@@ -89,18 +90,84 @@ export async function getProducts(req: AuthenticatedRequest, res: Response): Pro
   if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
   const pagination = parsePagination(req.query as Record<string, unknown>)
   if (!pagination) { res.status(400).json({ message: 'Invalid page or limit.' }); return }
-  const filter = { storeId, status: 'active' as const }
-  const [products, total] = await Promise.all([
-    ProductModel.find(filter).sort({ name: 1, _id: 1 }).skip(pagination.skip).limit(pagination.limit).lean(),
+  const query = req.query as Record<string, unknown>
+  const search = query.q === undefined ? '' : (typeof query.q === 'string' ? query.q.trim() : null)
+  const category = query.category === undefined || query.category === '' ? null : (typeof query.category === 'string' && query.category.length <= 64 ? query.category : undefined)
+  const status = query.status === undefined || query.status === 'all' ? null : (query.status === 'low' || query.status === 'out' || query.status === 'ok' ? query.status : undefined)
+  const sort = query.sort === undefined || query.sort === 'name' ? 'name' : (query.sort === 'stock' ? 'stock' : undefined)
+  if (search === null || search.length > 64 || category === undefined || status === undefined || sort === undefined) { res.status(400).json({ message: 'Invalid search, category, status or sort.' }); return }
+
+  const conditions: Record<string, unknown>[] = [{ storeId, status: 'active' }]
+  if (search) {
+    // The text is matched literally across the fields a store owner searches by, within this store only.
+    const pattern = { $regex: escapeRegex(search), $options: 'i' }
+    conditions.push({ $or: [{ name: pattern }, { barcode: pattern }, { sku: pattern }, { brand: pattern }] })
+  }
+  if (category) conditions.push({ category })
+  if (status === 'out') conditions.push({ currentStock: { $lte: 0 } })
+  else if (status === 'low') conditions.push({ currentStock: { $gt: 0 } }, { minStock: { $gt: 0 } }, { $expr: { $lte: ['$currentStock', '$minStock'] } })
+  else if (status === 'ok') conditions.push({ currentStock: { $gt: 0 } }, { $or: [{ minStock: 0 }, { $expr: { $gt: ['$currentStock', '$minStock'] } }] })
+  const filter = { $and: conditions }
+  const order: Record<string, 1 | -1> = sort === 'stock' ? { currentStock: 1, name: 1, _id: 1 } : { name: 1, _id: 1 }
+
+  const [products, total, counts, categories] = await Promise.all([
+    ProductModel.find(filter).sort(order).skip(pagination.skip).limit(pagination.limit).lean(),
     ProductModel.countDocuments(filter),
+    // Counts for the whole store (not the current filter), so the filter chips can show how many products need attention.
+    ProductModel.aggregate<{ _id: null; all: number; out: number; low: number }>([
+      { $match: { storeId, status: 'active' } },
+      { $group: { _id: null, all: { $sum: 1 }, out: { $sum: { $cond: [{ $lte: ['$currentStock', 0] }, 1, 0] } }, low: { $sum: { $cond: [{ $and: [{ $gt: ['$currentStock', 0] }, { $gt: ['$minStock', 0] }, { $lte: ['$currentStock', '$minStock'] }] }, 1, 0] } } } },
+    ]),
+    ProductModel.distinct('category', { storeId, status: 'active' }) as Promise<string[]>,
   ])
-  res.json({ products, pagination: { page: pagination.page, limit: pagination.limit, total } })
+  res.json({
+    products,
+    pagination: { page: pagination.page, limit: pagination.limit, total },
+    summary: { all: counts[0]?.all ?? 0, out: counts[0]?.out ?? 0, low: counts[0]?.low ?? 0 },
+    categories: categories.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' })),
+  })
+}
+
+type PackFields = { purchaseUnit?: string; unitsPerPurchaseUnit?: number }
+
+/**
+ * Reads the optional pack setup (for example "pack" = 24 pieces). Both values are given together or both are left out, and the
+ * size must be a whole number from 2 to 100,000. Returns null for unusable input; an empty object means no pack setup.
+ */
+function parsePack(purchaseUnit: unknown, unitsPerPurchaseUnit: unknown): PackFields | null {
+  const none = (purchaseUnit === undefined || purchaseUnit === '' || purchaseUnit === null) && (unitsPerPurchaseUnit === undefined || unitsPerPurchaseUnit === '' || unitsPerPurchaseUnit === null)
+  if (none) return {}
+  const unit = cleanText(purchaseUnit, 32)
+  if (!unit || typeof unitsPerPurchaseUnit !== 'number' || !Number.isSafeInteger(unitsPerPurchaseUnit) || unitsPerPurchaseUnit < 2 || unitsPerPurchaseUnit > 100000) return null
+  return { purchaseUnit: unit, unitsPerPurchaseUnit }
+}
+
+/** Another active or archived product in this store that already uses this barcode (in either UPC-A or EAN-13 form). */
+async function barcodeOwner(storeId: mongoose.Types.ObjectId, barcode: string, exceptId?: mongoose.Types.ObjectId) {
+  return ProductModel.findOne({ storeId, barcode: { $in: barcodeVariants(barcode) }, ...(exceptId ? { _id: { $ne: exceptId } } : {}) }).select('name status').lean()
+}
+
+function duplicateBarcodeMessage(owner: { name: string; status?: string | null }): string {
+  return owner.status === 'archived' ? `This barcode belongs to "${owner.name}", which was archived. Restore that product instead of adding a new one.` : `This barcode is already used by "${owner.name}".`
+}
+
+/** Brings an archived product back (for example when its barcode is scanned again). */
+export async function restoreProduct(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const storeId = storeIdFromRequest(req)
+  if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
+  const productId = parseObjectId(req.params.id)
+  const product = productId ? await ProductModel.findOneAndUpdate({ _id: productId, storeId, status: 'archived' }, { $set: { status: 'active' } }, { returnDocument: 'after' }).lean() : null
+  if (!product) { res.status(404).json({ message: 'Archived product not found.' }); return }
+  await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'PRODUCT_RESTORED', resourceType: 'Product', resourceId: product._id })
+  res.json({ product })
 }
 
 export async function createProduct(req: AuthenticatedRequest, res: Response): Promise<void> {
   const storeId = storeIdFromRequest(req)
   if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
-  const payload = (req.body ?? {}) as { name?: unknown; barcode?: unknown; sku?: unknown; category?: unknown; brand?: unknown; supplier?: unknown; costPrice?: unknown; sellingPrice?: unknown; initialStock?: unknown; minStock?: unknown; unit?: unknown }
+  const payload = (req.body ?? {}) as { name?: unknown; barcode?: unknown; sku?: unknown; category?: unknown; brand?: unknown; supplier?: unknown; costPrice?: unknown; sellingPrice?: unknown; initialStock?: unknown; minStock?: unknown; unit?: unknown; purchaseUnit?: unknown; unitsPerPurchaseUnit?: unknown }
+  const pack = parsePack(payload.purchaseUnit, payload.unitsPerPurchaseUnit)
+  if (!pack) { res.status(400).json({ message: 'A pack needs a unit name and a size that is a whole number from 2 to 100,000.' }); return }
   const name = cleanText(payload.name)
   const category = cleanText(payload.category)
   if (!name || !category) { res.status(400).json({ message: 'Product name and category are required.' }); return }
@@ -118,10 +185,15 @@ export async function createProduct(req: AuthenticatedRequest, res: Response): P
     currentStock: payload.initialStock ?? 0,
     minStock: payload.minStock ?? 0,
     unit: cleanText(payload.unit) ?? 'piece',
+    ...pack,
   }
   for (const field of ['barcode', 'sku', 'brand', 'supplier'] as const) {
     const value = cleanText(payload[field])
     if (value) productData[field] = value
+  }
+  if (typeof productData.barcode === 'string') {
+    const owner = await barcodeOwner(storeId, productData.barcode)
+    if (owner) { res.status(409).json({ message: duplicateBarcodeMessage(owner) }); return }
   }
   const session = await mongoose.startSession()
   let product: Awaited<ReturnType<typeof ProductModel.create>>[number] | undefined
@@ -263,8 +335,14 @@ export async function updateProduct(req: AuthenticatedRequest, res: Response): P
   if (!storeId) { res.status(401).json({ message: 'Invalid session.' }); return }
   const productId = parseObjectId(req.params.id)
   if (!productId) { res.status(404).json({ message: 'Product not found.' }); return }
-  const updates = pickRequestFields(['name', 'barcode', 'sku', 'category', 'brand', 'supplier', 'costPrice', 'sellingPrice', 'minStock', 'unit'], req.body)
+  const updates = pickRequestFields(['name', 'barcode', 'sku', 'category', 'brand', 'supplier', 'costPrice', 'sellingPrice', 'minStock', 'unit', 'purchaseUnit', 'unitsPerPurchaseUnit'], req.body)
   if (!Object.keys(updates).length) { res.status(400).json({ message: 'No editable product fields were provided.' }); return }
+  // The two pack fields change together: set both, or clear both by sending them empty.
+  const packTouched = 'purchaseUnit' in updates || 'unitsPerPurchaseUnit' in updates
+  const pack = packTouched ? parsePack(updates.purchaseUnit, updates.unitsPerPurchaseUnit) : {}
+  if (!pack) { res.status(400).json({ message: 'A pack needs a unit name and a size that is a whole number from 2 to 100,000.' }); return }
+  delete updates.purchaseUnit
+  delete updates.unitsPerPurchaseUnit
   if (('costPrice' in updates && !isMoney(updates.costPrice)) || ('sellingPrice' in updates && !isMoney(updates.sellingPrice))) { res.status(400).json({ message: 'Prices must be valid amounts of zero or more.' }); return }
   if ('minStock' in updates && !isCount(updates.minStock)) { res.status(400).json({ message: 'Minimum stock must be a whole number of zero or more.' }); return }
   for (const field of ['name', 'category', 'barcode', 'sku', 'brand', 'supplier', 'unit']) {
@@ -277,10 +355,29 @@ export async function updateProduct(req: AuthenticatedRequest, res: Response): P
     if (value === '' && !['name', 'category'].includes(field)) removals[field] = ''
     else changes[field] = typeof value === 'string' ? value.trim() : value
   }
-  const product = await ProductModel.findOneAndUpdate({ _id: productId, storeId, status: 'active' }, { ...(Object.keys(changes).length ? { $set: changes } : {}), ...(Object.keys(removals).length ? { $unset: removals } : {}) }, { returnDocument: 'after', runValidators: true }).lean()
-  if (!product) { res.status(404).json({ message: 'Product not found.' }); return }
-  await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'PRODUCT_UPDATED', resourceType: 'Product', resourceId: product._id })
-  res.json({ product })
+  if (packTouched) {
+    if (pack.purchaseUnit) Object.assign(changes, pack)
+    else Object.assign(removals, { purchaseUnit: '', unitsPerPurchaseUnit: '' })
+  }
+  if (typeof changes.barcode === 'string') {
+    const owner = await barcodeOwner(storeId, changes.barcode, productId)
+    if (owner) { res.status(409).json({ message: duplicateBarcodeMessage(owner) }); return }
+  }
+  try {
+    const before = await ProductModel.findOne({ _id: productId, storeId, status: 'active' }).select('sellingPrice costPrice minStock').lean()
+    const product = await ProductModel.findOneAndUpdate({ _id: productId, storeId, status: 'active' }, { ...(Object.keys(changes).length ? { $set: changes } : {}), ...(Object.keys(removals).length ? { $unset: removals } : {}) }, { returnDocument: 'after', runValidators: true }).lean()
+    if (!product) { res.status(404).json({ message: 'Product not found.' }); return }
+    // Price and alert-level changes keep the old and new values, so they can be traced later.
+    const changed: Record<string, string | number | boolean> = { fields: Object.keys({ ...changes, ...removals }).join(',') }
+    for (const field of ['sellingPrice', 'costPrice', 'minStock'] as const) {
+      if (before && before[field] !== product[field]) { changed[`${field}Before`] = before[field]; changed[`${field}After`] = product[field] }
+    }
+    await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'PRODUCT_UPDATED', resourceType: 'Product', resourceId: product._id, metadata: changed })
+    res.json({ product })
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 11000) { res.status(409).json({ message: 'This barcode is already used by another product.' }); return }
+    throw error
+  }
 }
 
 const MAX_BATCH = 500

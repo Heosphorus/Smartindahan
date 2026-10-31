@@ -7,14 +7,10 @@ import { InventoryTransactionModel } from '../models/InventoryTransaction.js'
 import { ProductModel } from '../models/Product.js'
 import { SaleModel } from '../models/Sale.js'
 import { recordAuditLog } from '../services/auditService.js'
+import { changeStock, isDuplicateKeyError, OperationError } from '../services/inventoryService.js'
+import { barcodeVariants, MAX_STOCK_CHANGE, STOCK_OUT_REASONS } from '../utils/inventory.js'
 import { parseObjectId } from '../utils/objectId.js'
-import { isIdempotencyKey, roundMoney } from '../utils/validation.js'
-
-class OperationError extends Error {
-  constructor(message: string, readonly statusCode = 400) {
-    super(message)
-  }
-}
+import { cleanText, isIdempotencyKey, isMoney, roundMoney } from '../utils/validation.js'
 
 function currentStore(req: AuthenticatedRequest): mongoose.Types.ObjectId | null {
   return parseObjectId(req.user?.storeId)
@@ -25,19 +21,23 @@ function failSession(res: Response): void { res.status(401).json({ message: 'Inv
 export async function lookupProduct(req: AuthenticatedRequest, res: Response): Promise<void> {
   const storeId = currentStore(req)
   if (!storeId) { failSession(res); return }
-  const rawValue = String(req.body?.rawValue ?? '').trim()
-  if (!rawValue) { res.status(400).json({ message: 'Barcode is required.' }); return }
-  const product = await ProductModel.findOne({ storeId, $or: [{ barcode: rawValue }, { sku: rawValue }] }).lean()
-  if (!product) { res.status(404).json({ found: false, message: 'Barcode not registered.' }); return }
+  const rawValue = typeof req.body?.rawValue === 'string' ? req.body.rawValue.trim() : ''
+  if (!rawValue || rawValue.length > 64) { res.status(400).json({ message: 'Barcode is required (64 characters or fewer).' }); return }
+  // The barcode is matched within this store's catalog only. Nothing is fetched from outside; an unknown code is simply unknown.
+  const variants = barcodeVariants(rawValue)
+  const matches = await ProductModel.find({ storeId, $or: [{ barcode: { $in: variants } }, { sku: rawValue }] }).lean()
+  const active = matches.find((candidate) => candidate.status === 'active' && variants.includes(candidate.barcode ?? '')) ?? matches.find((candidate) => candidate.status === 'active')
+  if (!active) {
+    const archived = matches[0]
+    res.status(404).json({ found: false, barcode: rawValue, ...(archived ? { archived: { id: archived._id, name: archived.name } } : {}), message: archived ? `"${archived.name}" uses this barcode but was archived.` : 'Barcode not registered.' })
+    return
+  }
+  const product = active
   // `sellPrice` is the documented contract name; `sellingPrice` matches the product records the POS screen uses.
-  res.json({ found: true, product: { id: product._id, name: product.name, barcode: product.barcode, currentStock: product.currentStock, sellPrice: product.sellingPrice, sellingPrice: product.sellingPrice, costPrice: product.costPrice } })
+  res.json({ found: true, product: { id: product._id, _id: product._id, name: product.name, barcode: product.barcode, sku: product.sku, brand: product.brand, category: product.category, unit: product.unit, purchaseUnit: product.purchaseUnit, unitsPerPurchaseUnit: product.unitsPerPurchaseUnit, minStock: product.minStock, currentStock: product.currentStock, sellPrice: product.sellingPrice, sellingPrice: product.sellingPrice, costPrice: product.costPrice } })
 }
 
 type CheckoutResult = { code: string; total: number; profit: number }
-
-function isDuplicateKeyError(error: unknown): boolean {
-  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 11000)
-}
 
 async function findSaleByIdempotencyKey(storeId: mongoose.Types.ObjectId, key: string): Promise<CheckoutResult | null> {
   const existing = await SaleModel.findOne({ storeId, idempotencyKey: key }).lean()
@@ -114,29 +114,51 @@ export async function checkout(req: AuthenticatedRequest, res: Response): Promis
   }
 }
 
+/** Maps an expected failure to its status and message; anything else is logged without detail and reported generically. */
+function sendFailure(res: Response, error: unknown, fallback: string): void {
+  if (error instanceof OperationError) { res.status(error.statusCode).json({ message: error.message }); return }
+  console.error(`${fallback} (${error instanceof Error ? error.name : 'UnknownError'})`)
+  res.status(500).json({ message: fallback })
+}
+
+function optionalKey(raw: unknown): string | undefined | null {
+  if (raw === undefined) return undefined
+  return isIdempotencyKey(raw) ? raw : null
+}
+
+/** Removes stock for a reason (damaged, expired, ...). A repeated request with the same key is recognised and not applied twice. */
 export async function stockOut(req: AuthenticatedRequest, res: Response): Promise<void> {
   const storeId = currentStore(req)
   if (!storeId) { failSession(res); return }
-  const payload = req.body as { productId?: string; quantity?: number; reason?: string; note?: string }
+  const payload = (req.body ?? {}) as { productId?: unknown; quantity?: unknown; reason?: unknown; note?: unknown; idempotencyKey?: unknown }
   const productId = parseObjectId(payload.productId)
-  if (!productId || !Number.isInteger(payload.quantity) || payload.quantity! < 1) { res.status(400).json({ message: 'Product and positive quantity are required.' }); return }
+  const quantity = payload.quantity
+  if (!productId || typeof quantity !== 'number' || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > MAX_STOCK_CHANGE) { res.status(400).json({ message: 'Product and positive quantity are required.' }); return }
+  if (payload.reason !== undefined && (typeof payload.reason !== 'string' || !(STOCK_OUT_REASONS as readonly string[]).includes(payload.reason))) { res.status(400).json({ message: `Reason must be one of: ${STOCK_OUT_REASONS.join(', ')}.` }); return }
+  if (payload.note !== undefined && payload.note !== '' && cleanText(payload.note, 200) === null) { res.status(400).json({ message: 'Note must be 200 characters or fewer.' }); return }
+  const idempotencyKey = optionalKey(payload.idempotencyKey)
+  if (idempotencyKey === null) { res.status(400).json({ message: 'Idempotency key is invalid.' }); return }
+  const userId = new mongoose.Types.ObjectId(req.user!.id)
+  const note = cleanText(payload.note, 200) ?? undefined
+
+  if (idempotencyKey) {
+    const earlier = await InventoryTransactionModel.findOne({ storeId, idempotencyKey, productId }).lean()
+    if (earlier) { res.status(200).json({ message: 'Stock-out was already recorded.', product: { id: productId.toString(), currentStock: earlier.newStock } }); return }
+  }
   const session = await mongoose.startSession()
   let newStock = 0
   try {
     await session.withTransaction(async () => {
-      const product = await ProductModel.findOne({ _id: productId, storeId, status: 'active' }).session(session)
-      if (!product) throw new OperationError('Product not found.', 404)
-      if (product.currentStock < payload.quantity!) throw new OperationError('Insufficient stock.', 409)
-      const previousStock = product.currentStock
-      product.currentStock -= payload.quantity!
-      await product.save({ session })
-      const transaction = { storeId, userId: new mongoose.Types.ObjectId(req.user!.id), productId: product._id, type: 'stock_out' as const, quantity: -payload.quantity!, previousStock, newStock: product.currentStock, ...(payload.reason ? { reason: payload.reason } : {}), ...(payload.note ? { note: payload.note } : {}) }
-      await InventoryTransactionModel.create([transaction], { session })
-      await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'INVENTORY_STOCK_OUT', resourceType: 'Product', resourceId: product._id, metadata: { quantity: payload.quantity!, previousStock, newStock: product.currentStock } }, session)
-      newStock = product.currentStock
+      const result = await changeStock(session, { storeId, userId, productId, delta: -quantity, type: 'stock_out', reason: payload.reason as string | undefined, note, idempotencyKey })
+      await recordAuditLog({ storeId, userId, event: 'INVENTORY_STOCK_OUT', resourceType: 'Product', resourceId: productId, metadata: { quantity, previousStock: result.previousStock, newStock: result.newStock, ...(typeof payload.reason === 'string' ? { reason: payload.reason } : {}) } }, session)
+      newStock = result.newStock
     })
   } catch (error) {
-    res.status(error instanceof OperationError ? error.statusCode : 500).json({ message: error instanceof OperationError ? error.message : 'Stock-out could not be completed.' })
+    if (idempotencyKey && isDuplicateKeyError(error)) {
+      const earlier = await InventoryTransactionModel.findOne({ storeId, idempotencyKey, productId }).lean()
+      if (earlier) { res.status(200).json({ message: 'Stock-out was already recorded.', product: { id: productId.toString(), currentStock: earlier.newStock } }); return }
+    }
+    sendFailure(res, error, 'Stock-out could not be completed.')
     return
   } finally {
     await session.endSession()
@@ -144,36 +166,41 @@ export async function stockOut(req: AuthenticatedRequest, res: Response): Promis
   res.status(201).json({ message: 'Stock-out recorded.', product: { id: productId.toString(), currentStock: newStock } })
 }
 
+/** Adds stock without a purchase record (a quick top-up). Receiving a supplier delivery goes through restock instead. */
 export async function stockIn(req: AuthenticatedRequest, res: Response): Promise<void> {
   const storeId = currentStore(req)
   if (!storeId) { failSession(res); return }
-  const payload = req.body as { items?: Array<{ productId?: string; quantity?: number; unitCost?: number }>; note?: string }
-  if (!payload.items?.length) { res.status(400).json({ message: 'At least one stock-in item is required.' }); return }
+  const payload = (req.body ?? {}) as { items?: Array<{ productId?: unknown; quantity?: unknown; unitCost?: unknown }>; note?: unknown; idempotencyKey?: unknown }
+  if (!Array.isArray(payload.items) || !payload.items.length || payload.items.length > 100) { res.status(400).json({ message: 'At least one stock-in item is required.' }); return }
+  const items: Array<{ productId: mongoose.Types.ObjectId; quantity: number; unitCost?: number }> = []
   for (const item of payload.items) {
-    if (!parseObjectId(item.productId) || typeof item.quantity !== 'number' || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || (item.unitCost !== undefined && (typeof item.unitCost !== 'number' || !Number.isFinite(item.unitCost) || item.unitCost < 0))) {
+    const productId = parseObjectId(item?.productId)
+    const quantity = item?.quantity
+    if (!productId || typeof quantity !== 'number' || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > MAX_STOCK_CHANGE || (item.unitCost !== undefined && !isMoney(item.unitCost))) {
       res.status(400).json({ message: 'Invalid stock-in item.' })
       return
     }
+    items.push({ productId, quantity, ...(item.unitCost !== undefined ? { unitCost: item.unitCost as number } : {}) })
   }
+  if (new Set(items.map((item) => item.productId.toHexString())).size !== items.length) { res.status(400).json({ message: 'List each product once.' }); return }
+  if (payload.note !== undefined && payload.note !== '' && cleanText(payload.note, 200) === null) { res.status(400).json({ message: 'Note must be 200 characters or fewer.' }); return }
+  const idempotencyKey = optionalKey(payload.idempotencyKey)
+  if (idempotencyKey === null) { res.status(400).json({ message: 'Idempotency key is invalid.' }); return }
+  const userId = new mongoose.Types.ObjectId(req.user!.id)
+  const note = cleanText(payload.note, 200) ?? undefined
+
+  if (idempotencyKey && await InventoryTransactionModel.exists({ storeId, idempotencyKey })) { res.status(200).json({ message: 'Stock-in was already recorded.' }); return }
   const session = await mongoose.startSession()
   try {
     await session.withTransaction(async () => {
-      for (const item of payload.items!) {
-        const productId = parseObjectId(item.productId)
-        if (!productId) throw new OperationError('Invalid stock-in item.')
-        const product = await ProductModel.findOne({ _id: productId, storeId, status: 'active' }).session(session)
-        if (!product) throw new OperationError('Product not found.', 404)
-        const previousStock = product.currentStock
-        product.currentStock += item.quantity!
-        if (item.unitCost !== undefined) product.costPrice = item.unitCost
-        await product.save({ session })
-        const transaction = { storeId, userId: new mongoose.Types.ObjectId(req.user!.id), productId: product._id, type: 'stock_in' as const, quantity: item.quantity!, previousStock, newStock: product.currentStock, ...(payload.note ? { note: payload.note } : {}) }
-        await InventoryTransactionModel.create([transaction], { session })
-        await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'INVENTORY_STOCK_IN', resourceType: 'Product', resourceId: product._id, metadata: { quantity: item.quantity!, previousStock, newStock: product.currentStock } }, session)
+      for (const item of items) {
+        const result = await changeStock(session, { storeId, userId, productId: item.productId, delta: item.quantity, type: 'stock_in', note, unitCost: item.unitCost, idempotencyKey, set: item.unitCost !== undefined ? { costPrice: item.unitCost } : undefined })
+        await recordAuditLog({ storeId, userId, event: 'INVENTORY_STOCK_IN', resourceType: 'Product', resourceId: item.productId, metadata: { quantity: item.quantity, previousStock: result.previousStock, newStock: result.newStock } }, session)
       }
     })
   } catch (error) {
-    res.status(error instanceof OperationError ? error.statusCode : 500).json({ message: error instanceof OperationError ? error.message : 'Stock-in could not be completed.' })
+    if (idempotencyKey && isDuplicateKeyError(error) && await InventoryTransactionModel.exists({ storeId, idempotencyKey })) { res.status(200).json({ message: 'Stock-in was already recorded.' }); return }
+    sendFailure(res, error, 'Stock-in could not be completed.')
     return
   } finally {
     await session.endSession()
@@ -181,36 +208,47 @@ export async function stockIn(req: AuthenticatedRequest, res: Response): Promise
   res.status(201).json({ message: 'Stock-in recorded.' })
 }
 
+/**
+ * Records a counted quantity for single products (for example from the product form). The change is the difference between what
+ * was counted and what the person saw (`expectedQuantity`), added to the stock at that instant, so a sale made in between is kept.
+ * Without `expectedQuantity` the stock at the moment of the request is used. Every change is written to the stock history.
+ * Counting many products with a review step is done through inventory counts instead.
+ */
 export async function inventoryCount(req: AuthenticatedRequest, res: Response): Promise<void> {
   const storeId = currentStore(req)
   if (!storeId) { failSession(res); return }
-  const payload = req.body as { counts?: Array<{ productId?: string; scannedQuantity?: number }>; note?: string }
-  if (!payload.counts?.length) { res.status(400).json({ message: 'At least one counted product is required.' }); return }
-
+  const payload = (req.body ?? {}) as { counts?: Array<{ productId?: unknown; scannedQuantity?: unknown; expectedQuantity?: unknown }>; note?: unknown }
+  if (!Array.isArray(payload.counts) || !payload.counts.length || payload.counts.length > 100) { res.status(400).json({ message: 'At least one counted product is required.' }); return }
+  const counts: Array<{ productId: mongoose.Types.ObjectId; counted: number; expected?: number }> = []
   for (const count of payload.counts) {
-    if (!parseObjectId(count.productId) || typeof count.scannedQuantity !== 'number' || !Number.isInteger(count.scannedQuantity) || count.scannedQuantity < 0) {
+    const productId = parseObjectId(count?.productId)
+    const counted = count?.scannedQuantity
+    const expected = count?.expectedQuantity
+    if (!productId || typeof counted !== 'number' || !Number.isSafeInteger(counted) || counted < 0 || counted > MAX_STOCK_CHANGE || (expected !== undefined && (typeof expected !== 'number' || !Number.isSafeInteger(expected) || expected < 0 || expected > MAX_STOCK_CHANGE))) {
       res.status(400).json({ message: 'Invalid inventory count.' })
       return
     }
+    counts.push({ productId, counted, ...(expected !== undefined ? { expected: expected as number } : {}) })
   }
+  if (new Set(counts.map((count) => count.productId.toHexString())).size !== counts.length) { res.status(400).json({ message: 'List each product once.' }); return }
+  if (payload.note !== undefined && payload.note !== '' && cleanText(payload.note, 200) === null) { res.status(400).json({ message: 'Note must be 200 characters or fewer.' }); return }
+  const userId = new mongoose.Types.ObjectId(req.user!.id)
+  const note = cleanText(payload.note, 200) ?? undefined
+
   const session = await mongoose.startSession()
   try {
     await session.withTransaction(async () => {
-      for (const count of payload.counts!) {
-        const productId = parseObjectId(count.productId)
-        if (!productId) throw new OperationError('Invalid inventory count.')
-        const product = await ProductModel.findOne({ _id: productId, storeId, status: 'active' }).session(session)
+      for (const count of counts) {
+        const product = await ProductModel.findOne({ _id: count.productId, storeId, status: 'active' }).select('currentStock').session(session).lean()
         if (!product) throw new OperationError('Product not found.', 404)
-        const previousStock = product.currentStock
-        product.currentStock = count.scannedQuantity!
-        await product.save({ session })
-        const transaction = { storeId, userId: new mongoose.Types.ObjectId(req.user!.id), productId: product._id, type: 'inventory_count' as const, quantity: count.scannedQuantity! - previousStock, previousStock, newStock: product.currentStock, ...(payload.note ? { note: payload.note } : {}) }
-        await InventoryTransactionModel.create([transaction], { session })
-        await recordAuditLog({ storeId, userId: new mongoose.Types.ObjectId(req.user!.id), event: 'INVENTORY_COUNT', resourceType: 'Product', resourceId: product._id, metadata: { countedStock: count.scannedQuantity!, previousStock } }, session)
+        const delta = count.counted - (count.expected ?? product.currentStock)
+        if (delta === 0) continue
+        const result = await changeStock(session, { storeId, userId, productId: count.productId, delta, type: 'inventory_count', note })
+        await recordAuditLog({ storeId, userId, event: 'INVENTORY_COUNT', resourceType: 'Product', resourceId: count.productId, metadata: { countedStock: count.counted, previousStock: result.previousStock, newStock: result.newStock } }, session)
       }
     })
   } catch (error) {
-    res.status(error instanceof OperationError ? error.statusCode : 500).json({ message: error instanceof OperationError ? error.message : 'Inventory count could not be completed.' })
+    sendFailure(res, error, 'Inventory count could not be completed.')
     return
   } finally {
     await session.endSession()
