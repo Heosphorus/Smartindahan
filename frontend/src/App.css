@@ -105,7 +105,9 @@
   padding: 10px 10px;
   border-radius: 10px;
   font-size: 0.96rem;
+  font-family: inherit;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
   transition: all 0.2s ease;
   transform: translateX(0);

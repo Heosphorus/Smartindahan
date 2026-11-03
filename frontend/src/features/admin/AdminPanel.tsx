@@ -1,16 +1,12 @@
-import { useState } from 'react'
 import { AdminDashboard, AdminUsers } from './AdminPages'
 import { authApi } from '../../services/authApi'
+import { adminPageFromPath, adminPageSlugs, pagePath } from '../../services/pageRoutes'
 import './AdminPages.css'
 
 export function AdminPanel() {
-  const [activeNav, setActiveNav] = useState('Dashboard')
+  const activeNav = adminPageFromPath(window.location.pathname)
 
   const navItems = ['Dashboard', 'Users']
-
-  const handleNavigation = (item: string) => {
-    setActiveNav(item)
-  }
 
   const handleLogout = async () => {
     const token = localStorage.getItem('sarismart_token')
@@ -44,10 +40,10 @@ export function AdminPanel() {
 
         <nav className="nav-list">
           {navItems.map((item) => (
-            <button key={item} className={activeNav === item ? 'nav-item active' : 'nav-item'} onClick={() => handleNavigation(item)} type="button">
+            <a key={item} href={pagePath(adminPageSlugs[item]!)} className={activeNav === item ? 'nav-item active' : 'nav-item'} aria-current={activeNav === item ? 'page' : undefined}>
               <span className="nav-icon">{item === 'Dashboard' ? '▣' : item === 'Users' ? '👥' : '⚙'}</span>
               {item}
-            </button>
+            </a>
           ))}
           <button className="nav-item logout-btn" onClick={handleLogout} type="button">
             <span className="nav-icon">⏻</span>

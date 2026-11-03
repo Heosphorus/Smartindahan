@@ -10,13 +10,7 @@ import { authApi } from './services/authApi'
 import { StoreOperationsDemo } from './features/store/StoreOperationsDemo'
 import { AdminPanel } from './features/admin/AdminPanel'
 import { installButtonTooltips } from './services/buttonTooltips'
-
-const trimTrailingSlashes = (value: string) => value.replace(/\/+$/, '')
-
-// The app may be hosted under a sub-path (GitHub Pages), so compare against the Vite base URL.
-function isAdminPath(pathname: string): boolean {
-  return trimTrailingSlashes(pathname) === `${trimTrailingSlashes(import.meta.env.BASE_URL)}/admin`
-}
+import { isAdminPath } from './services/pageRoutes'
 
 async function signOut(token: string | null) {
   // Revoke the session on the server, then drop it locally even if the network call fails.

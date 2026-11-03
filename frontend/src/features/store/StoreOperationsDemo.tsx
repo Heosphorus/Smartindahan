@@ -6,6 +6,7 @@ import { AlertsPage, CustomersPage, ExpensesPage, ReportsPage, SalesPage, Settin
 import { PriceListPage } from './PriceListPage'
 import { InventoryPage } from '../inventory/InventoryPage'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { pagePath, storePageFromPath, storePageSlugs } from '../../services/pageRoutes'
 import './DashboardControls.css'
 
 const formatPeso = (value: number) => `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -13,8 +14,7 @@ const formatPeso = (value: number) => `₱${value.toLocaleString('en-PH', { mini
 const NOT_LOADED = '—'
 
 export function StoreOperationsDemo() {
-  const [activeNav, setActiveNav] = useState('Dashboard')
-  const [navNotice, setNavNotice] = useState('')
+  const activeNav = storePageFromPath(window.location.pathname)
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null)
   const [dashboardError, setDashboardError] = useState('')
   const [showLogoutModal, setShowLogoutModal] = useState(false)
@@ -52,15 +52,6 @@ export function StoreOperationsDemo() {
 
   const navItems = ['Dashboard', 'POS', 'Inventory', 'Price List', 'Sales', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Alerts', 'Settings']
 
-  const handleNavigation = (item: string) => {
-    setActiveNav(item)
-    setNavNotice('')
-    if (item === 'Dashboard') window.scrollTo({ top: 0, behavior: 'smooth' })
-    if (item === 'POS') {
-      return
-    }
-  }
-
   const handleLogout = async () => {
     const token = localStorage.getItem('sarismart_token')
     try {
@@ -93,10 +84,10 @@ export function StoreOperationsDemo() {
 
         <nav className="nav-list">
           {navItems.map((item) => (
-            <button key={item} className={activeNav === item ? 'nav-item active' : 'nav-item'} onClick={() => handleNavigation(item)} type="button">
+            <a key={item} href={pagePath(storePageSlugs[item]!)} className={activeNav === item ? 'nav-item active' : 'nav-item'} aria-current={activeNav === item ? 'page' : undefined}>
               <span className="nav-icon">{item === 'Dashboard' ? '▣' : item === 'POS' ? '◫' : item === 'Price List' ? '₱' : item === 'Sales' ? '₱' : item === 'Inventory' ? '▤' : item === 'Customers' ? '◔' : item === 'Suppliers' ? '◍' : item === 'Expenses' ? '▦' : item === 'Reports' ? '▥' : item === 'Alerts' ? '⚑' : '⚙'}</span>
               {item}
-            </button>
+            </a>
           ))}
           <button className="nav-item logout-btn" onClick={() => setShowLogoutModal(true)} type="button">
             <span className="nav-icon">⏻</span>
@@ -106,7 +97,6 @@ export function StoreOperationsDemo() {
       </aside>
 
       <main className="main-panel">
-        {navNotice && <div className="dashboard-error">{navNotice}</div>}
         <header className="topbar">
           <div className="page-title">{dashboard?.store.name ?? 'Your Store'}</div>
         </header>
