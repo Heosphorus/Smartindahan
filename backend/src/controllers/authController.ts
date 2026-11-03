@@ -131,6 +131,12 @@ export async function register(req: Request, res: Response): Promise<void> {
     return
   }
 
+  const mobileNumber = payload.mobileNumber!.trim()
+  if (!/^\d{1,15}$/.test(mobileNumber)) {
+    res.status(400).json({ message: 'Mobile number must contain only digits and be no longer than 15 digits.' })
+    return
+  }
+
   const passwordCheck = validatePasswordStrength(payload.password!)
   if (!passwordCheck.isValid) {
     res.status(400).json({ message: passwordCheck.message })
@@ -167,7 +173,7 @@ export async function register(req: Request, res: Response): Promise<void> {
       firstName: payload.firstName!.trim(),
       lastName: payload.lastName!.trim(),
       email,
-      mobileNumber: payload.mobileNumber!.trim(),
+      mobileNumber,
       passwordHash,
       storeName,
       storeAddress: payload.storeAddress!.trim(),

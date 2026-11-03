@@ -9,6 +9,16 @@ import './AuthPage.css'
 
 type AuthMode = 'login' | 'register' | 'verify' | 'forgot' | 'reset'
 
+function PasswordEye({ visible }: { visible: boolean }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+      {!visible && <path d="m3 3 18 18" />}
+    </svg>
+  )
+}
+
 const initialRegistration = {
   firstName: '', lastName: '', email: '', mobileNumber: '', password: '', confirmPassword: '', storeName: '', storeAddress: '',
 } as const
@@ -18,7 +28,9 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
   const [form, setForm] = useState(initialRegistration)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
+  const [showRegistrationPassword, setShowRegistrationPassword] = useState(false)
+  const [showConfirmRegistrationPassword, setShowConfirmRegistrationPassword] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState('')
   const [userId, setUserId] = useState('')
   const [otp, setOtp] = useState('')
@@ -223,7 +235,7 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
 
           {mode === 'login' && <form onSubmit={(event) => { event.preventDefault(); void login() }}>
             <label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required /></label>
-            <label>Password<div className="auth-password-field"><input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /><button className="auth-password-toggle" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? 'Hide' : 'Show'}</button></div></label>
+            <label>Password<div className="auth-password-field"><input type={showLoginPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /><button className="auth-password-toggle" type="button" aria-label={showLoginPassword ? 'Hide password' : 'Show password'} aria-pressed={showLoginPassword} onClick={() => setShowLoginPassword((visible) => !visible)}><PasswordEye visible={showLoginPassword} /></button></div></label>
             <button className="auth-primary" disabled={busy}>{busy ? 'Signing in...' : 'Sign in'}</button>
             <button className="auth-link auth-forgot" type="button" onClick={() => changeMode('forgot')}>Forgot password?</button>
           </form>}
@@ -231,8 +243,8 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (token: string)
           {mode === 'register' && <form className="auth-register-form" onSubmit={(event) => { event.preventDefault(); void register() }}>
             <div className="auth-two-col"><label>First name<input value={form.firstName} onChange={(event) => updateField('firstName', event.target.value)} required /></label><label>Last name<input value={form.lastName} onChange={(event) => updateField('lastName', event.target.value)} required /></label></div>
             <label>Email address<input type="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} required /></label>
-            <label>Mobile number<input value={form.mobileNumber} onChange={(event) => updateField('mobileNumber', event.target.value)} required /></label>
-            <div className="auth-two-col"><label>Password<div className="auth-password-field"><input type={showPassword ? 'text' : 'password'} value={form.password} onChange={(event) => updateField('password', event.target.value)} autoComplete="new-password" required /><button className="auth-password-toggle" type="button" aria-label={showPassword ? 'Hide passwords' : 'Show passwords'} aria-pressed={showPassword} onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? 'Hide' : 'Show'}</button></div></label><label>Confirm password<div className="auth-password-field"><input type={showPassword ? 'text' : 'password'} value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} autoComplete="new-password" required /></div></label></div>
+            <label>Mobile number<input type="text" inputMode="numeric" autoComplete="tel" maxLength={15} pattern="[0-9]{1,15}" title="Enter up to 15 digits." value={form.mobileNumber} onChange={(event) => updateField('mobileNumber', event.target.value.replace(/\D/g, '').slice(0, 15))} required /></label>
+            <div className="auth-two-col"><label>Password<div className="auth-password-field"><input type={showRegistrationPassword ? 'text' : 'password'} value={form.password} onChange={(event) => updateField('password', event.target.value)} autoComplete="new-password" required /><button className="auth-password-toggle" type="button" aria-label={showRegistrationPassword ? 'Hide password' : 'Show password'} aria-pressed={showRegistrationPassword} onClick={() => setShowRegistrationPassword((visible) => !visible)}><PasswordEye visible={showRegistrationPassword} /></button></div></label><label>Confirm password<div className="auth-password-field"><input type={showConfirmRegistrationPassword ? 'text' : 'password'} value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} autoComplete="new-password" required /><button className="auth-password-toggle" type="button" aria-label={showConfirmRegistrationPassword ? 'Hide confirm password' : 'Show confirm password'} aria-pressed={showConfirmRegistrationPassword} onClick={() => setShowConfirmRegistrationPassword((visible) => !visible)}><PasswordEye visible={showConfirmRegistrationPassword} /></button></div></label></div>
             <label>Store name<input value={form.storeName} onChange={(event) => updateField('storeName', event.target.value)} required /></label>
             <label>Store address<input value={form.storeAddress} onChange={(event) => updateField('storeAddress', event.target.value)} required /></label>
             <div className="consent-box">
