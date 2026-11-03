@@ -16,7 +16,7 @@ type Scan = { kind: 'unknown'; barcode: string; message: string; archived?: { id
 const STATUS_CHIPS: Array<{ value: StatusFilter; label: string }> = [{ value: 'all', label: 'All' }, { value: 'low', label: 'Low stock' }, { value: 'out', label: 'Out of stock' }]
 
 /** Find products by name, SKU or barcode, filter by category and stock level, and change stock or prices with one tap. */
-export function StockTab({ onRestock, refreshSignal = 0 }: { onRestock: (product: ProductRecord) => void; /** Changes whenever stock was changed elsewhere (a delivery or a count), so this list reloads. */ refreshSignal?: number }) {
+export function StockTab({ onRestock, refreshSignal = 0, autoRefreshSignal = 0 }: { onRestock: (product: ProductRecord) => void; /** Changes whenever stock was changed elsewhere (a delivery or a count), so this list reloads. */ refreshSignal?: number; autoRefreshSignal?: number }) {
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('')
@@ -39,7 +39,7 @@ export function StockTab({ onRestock, refreshSignal = 0 }: { onRestock: (product
     return () => window.clearTimeout(timer)
   }, [search])
 
-  const key = JSON.stringify([query, category, status, sort, page, reloads, refreshSignal])
+  const key = JSON.stringify([query, category, status, sort, page, reloads, refreshSignal, autoRefreshSignal])
   useEffect(() => {
     let active = true
     inventoryApi.listProducts({ q: query, category, status, sort, page, limit: PAGE_SIZE })

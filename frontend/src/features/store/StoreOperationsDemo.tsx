@@ -6,6 +6,7 @@ import { AlertsPage, CustomersPage, ExpensesPage, ReportsPage, SalesPage, Settin
 import { PriceListPage } from './PriceListPage'
 import { InventoryPage } from '../inventory/InventoryPage'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useAutoRefresh } from '../../hooks/useAutoRefresh'
 import { pagePath, storePageFromPath, storePageSlugs } from '../../services/pageRoutes'
 import './DashboardControls.css'
 
@@ -20,6 +21,7 @@ export function StoreOperationsDemo() {
   const [showLogoutModal, setShowLogoutModal] = useState(false)
   useEscapeKey(showLogoutModal, () => setShowLogoutModal(false))
   const [salesPeriod, setSalesPeriod] = useState<'weekly' | 'monthly'>('weekly')
+  const refreshSignal = useAutoRefresh(activeNav === 'Dashboard')
 
   const [reloadCount, setReloadCount] = useState(0)
 
@@ -31,7 +33,7 @@ export function StoreOperationsDemo() {
       .then((data) => { if (currentRequest) { setDashboard(data); setDashboardError('') } })
       .catch((error: unknown) => { if (currentRequest) setDashboardError(error instanceof Error ? error.message : 'Unable to load dashboard data.') })
     return () => { currentRequest = false }
-  }, [salesPeriod, activeNav, reloadCount])
+  }, [salesPeriod, activeNav, reloadCount, refreshSignal])
 
   useEffect(() => {
     const syncStoreName = (event: Event) => {

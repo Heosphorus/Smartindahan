@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { authApi } from '../../services/authApi'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useAutoRefresh } from '../../hooks/useAutoRefresh'
 import './AdminPages.css'
 
 type AdminUser = {
@@ -23,6 +24,7 @@ export function AdminDashboard() {
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [loading, setLoading] = useState(Boolean(token))
   const [error, setError] = useState('')
+  const refreshSignal = useAutoRefresh(Boolean(token))
 
   useEffect(() => {
     if (!token) return
@@ -30,7 +32,7 @@ export function AdminDashboard() {
       .then(data => setStats(data.stats ?? null))
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load admin stats'))
       .finally(() => setLoading(false))
-  }, [token])
+  }, [token, refreshSignal])
 
   if (!token) return <section className="admin-page"><p>You must be logged in as admin.</p></section>
 
@@ -74,6 +76,7 @@ export function AdminUsers() {
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [newEmail, setNewEmail] = useState('')
+  const refreshSignal = useAutoRefresh(Boolean(token) && !showPasswordModal && !showEmailModal)
   useEscapeKey(showPasswordModal || showEmailModal, () => {
     setShowPasswordModal(false)
     setShowEmailModal(false)
@@ -88,7 +91,7 @@ export function AdminUsers() {
       .then(data => setUsers(data.users || []))
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load users'))
       .finally(() => setLoading(false))
-  }, [token])
+  }, [token, refreshSignal])
 
   if (!token) return <section className="admin-page"><p>You must be logged in as admin.</p></section>
 

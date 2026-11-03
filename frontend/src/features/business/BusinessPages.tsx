@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { businessApi, type Customer, type Alert, type Expense, type Report, type Sale, type Settings, type Supplier } from '../../services/businessApi'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useAutoRefresh } from '../../hooks/useAutoRefresh'
 import { authApi } from '../../services/authApi'
 import { accentOptions, fontOptions, fontSizeOptions, getThemePreferences, saveThemePreferences, type ThemeMode } from '../../services/themePreferences'
 import './BusinessPages.css'
@@ -69,13 +70,14 @@ export function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const refreshSignal = useAutoRefresh()
 
   useEffect(() => {
     businessApi.alerts()
       .then(data => setAlerts(data.alerts))
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load alerts'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [refreshSignal])
 
   return (
     <section className="business-page">
@@ -118,6 +120,7 @@ export function CustomersPage() {
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string | null }>({ isOpen: false, id: null })
   const [formData, setFormData] = useState({ name: '', mobileNumber: '', address: '', creditLimit: '' })
   const [notice, setNotice] = useState('')
+  const refreshSignal = useAutoRefresh()
   const action = useSubmitAction()
 
   useEffect(() => {
@@ -125,7 +128,7 @@ export function CustomersPage() {
       .then(data => setCustomers(data.customers))
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load customers'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [refreshSignal])
 
   const handleAddCustomer = (e: React.FormEvent) => {
     e.preventDefault()
@@ -288,6 +291,7 @@ export function ExpensesPage() {
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string | null }>({ isOpen: false, id: null })
   const [formData, setFormData] = useState({ category: '', description: '', amount: '', expenseDate: '' })
   const [notice, setNotice] = useState('')
+  const refreshSignal = useAutoRefresh()
   const action = useSubmitAction()
 
   useEffect(() => {
@@ -295,7 +299,7 @@ export function ExpensesPage() {
       .then(data => setExpenses(data.expenses))
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load expenses'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [refreshSignal])
 
   const handleAddExpense = (e: React.FormEvent) => {
     e.preventDefault()
@@ -444,13 +448,14 @@ export function ReportsPage() {
   const [report, setReport] = useState<Report | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const refreshSignal = useAutoRefresh()
 
   useEffect(() => {
     businessApi.reports()
       .then(data => setReport(data))
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load reports'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [refreshSignal])
 
   if (loading) return <LoadingBlock label="Loading reports…" />
 
@@ -533,13 +538,14 @@ export function SalesPage() {
   const [sales, setSales] = useState<Sale[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const refreshSignal = useAutoRefresh()
 
   useEffect(() => {
     businessApi.sales()
       .then(data => setSales(data.sales))
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load sales'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [refreshSignal])
 
   if (loading) return <LoadingBlock label="Loading sales…" />
 
@@ -809,6 +815,7 @@ export function SuppliersPage() {
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string | null }>({ isOpen: false, id: null })
   const [formData, setFormData] = useState({ name: '', contactNumber: '', address: '' })
   const [notice, setNotice] = useState('')
+  const refreshSignal = useAutoRefresh()
   const action = useSubmitAction()
 
   useEffect(() => {
@@ -816,7 +823,7 @@ export function SuppliersPage() {
       .then(data => setSuppliers(data.suppliers))
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load suppliers'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [refreshSignal])
 
   const handleAddSupplier = (e: React.FormEvent) => {
     e.preventDefault()

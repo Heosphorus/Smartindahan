@@ -7,6 +7,7 @@ import { CategoryManager, type CategoryRow } from './CategoryManager'
 import { ExportDialog } from './ExportDialog'
 import { productKey } from './productKey'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useAutoRefresh } from '../../hooks/useAutoRefresh'
 import { lookupPublicProduct } from '../../services/openFoodFacts'
 import { BarcodeCameraScanner } from '../pos/BarcodeCameraScanner'
 import '../inventory/Inventory.css'
@@ -355,9 +356,10 @@ export function PriceListPage() {
   const [isBulkSaving, setIsBulkSaving] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const refreshSignal = useAutoRefresh(!editor && !bulk && !managingCategories && selected.size === 0 && !batchEditing && !batchDeleting && !exporting && !isSaving && !isDeleting && !isBulkSaving && !isBatchSaving && !deleteTarget)
 
-  const load = useCallback(async () => {
-    setIsLoading(true)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true)
     setError('')
     try {
       const first = await storeApi.products(1, API_PAGE_SIZE)
@@ -367,7 +369,7 @@ export function PriceListPage() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to load the price list.')
     } finally {
-      setIsLoading(false)
+      if (!silent) setIsLoading(false)
     }
   }, [])
 
@@ -375,6 +377,9 @@ export function PriceListPage() {
     const timer = window.setTimeout(() => { void load() }, 0)
     return () => window.clearTimeout(timer)
   }, [load])
+  useEffect(() => {
+    if (refreshSignal > 0) void load(true)
+  }, [refreshSignal, load])
   useEffect(() => {
     if (!notice) return undefined
     const timer = window.setTimeout(() => setNotice(''), 4000)

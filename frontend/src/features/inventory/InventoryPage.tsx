@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useAutoRefresh } from '../../hooks/useAutoRefresh'
 
 import type { ProductRecord } from '../../services/storeApi'
 import { CountTab } from './CountTab'
@@ -19,6 +20,7 @@ export function InventoryPage() {
   const [tab, setTab] = useState<TabId>('stock')
   const [lines, setLines] = useState<RestockDraftLine[]>([])
   const [version, setVersion] = useState(0)
+  const autoRefreshSignal = useAutoRefresh(tab === 'stock')
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const changed = () => setVersion((count) => count + 1)
 
@@ -40,7 +42,7 @@ export function InventoryPage() {
         {item.label}{item.id === 'restock' && lines.length > 0 && <span className="inv-chip-count" aria-label={`${lines.length} in this delivery`}>{lines.length}</span>}
       </button>)}
     </div>
-    <div role="tabpanel" id="inv-panel-stock" aria-labelledby="inv-tab-stock" hidden={tab !== 'stock'}><StockTab refreshSignal={version} onRestock={restockProduct} /></div>
+    <div role="tabpanel" id="inv-panel-stock" aria-labelledby="inv-tab-stock" hidden={tab !== 'stock'}><StockTab refreshSignal={version} autoRefreshSignal={autoRefreshSignal} onRestock={restockProduct} /></div>
     <div role="tabpanel" id="inv-panel-restock" aria-labelledby="inv-tab-restock" hidden={tab !== 'restock'}><RestockTab lines={lines} setLines={setLines} onChanged={changed} onShowStock={() => setTab('stock')} /></div>
     <div role="tabpanel" id="inv-panel-count" aria-labelledby="inv-tab-count" hidden={tab !== 'count'}><CountTab onChanged={changed} /></div>
   </section>
